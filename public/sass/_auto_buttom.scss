@@ -1,0 +1,12 @@
+.site {
+   display: flex;
+   margin-top: 70px;
+   height: calc(100vh - 70px);
+   flex-direction: column;
+   padding: 0 1.5rem;
+ }
+ 
+.site-content {
+   flex: 1;
+ }
+ 

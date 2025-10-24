@@ -1,0 +1,40 @@
+.table.detail {
+   tr:first-child {
+      td {
+         border-top: 0;
+      }
+   }
+   td:first-child {
+      padding-left: 0;
+      width: 125px;
+      opacity: .5;
+   }
+}
+
+.table-range {
+   thead {
+      th {
+         vertical-align: middle;
+      }
+   }
+}
+
+.table thead.bg-primary th {
+   border-color:  rgba(255,255,255,.25);
+}
+
+@media (max-width: 767px) {
+   .table-range {
+      th,
+      td {
+         font-size: 11px;
+     }
+   }
+}
+
+
+//  thead > tr:nth-child(1) > th:nth-child(1) { background-color: Orchid; }
+//  thead > tr:nth-child(1) > th:nth-child(2) { background-color: YellowGreen; }
+//  thead > tr:nth-child(1) > th:nth-child(3) { background-color: Orange; }
+//  thead > tr:nth-child(2) > th              { background-color: Gold; }
+ 

@@ -1,0 +1,196 @@
+// note:
+// ******font end*****
+// konten disclaimer, link compress image ✔️
+// password dapat di lihat                   
+// tamipilan user login mepet kanan kiri e ✔️
+// setting jumlah mahasiswa biar rapie ✔️
+// konten disclaimer,  artikel, input dan updatee ✔️
+// article UI , update dan adde ✔️
+// table mahasiswa dan dosen article e ✔️
+// modal  untuk  edit user ✔️
+
+
+// ******backend*****
+//  edit data tanggal bermasalah !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! ✔️
+//  edit data user   ✔️
+
+
+
+
+// error login dan regis             ✔️
+//  kondisi dihalaman detail      ✔️
+// export excel                               ✔️
+// file size input foto   ✔️
+// inputan  imgae sunting           ✔️
+
+//-----------------artikell-----------------
+// input banyak data  ✔️
+// database ✔️
+//  edit ✔️
+//  delete ✔️
+//   search  ✔️
+// kalender ✔️
+
+// Journal bereputasi tidak usah ✔️
+// Artikel Dosen tidak udah requred ✔️
+// Volume , nomer  ✔️
+// Mahasiswa dan dosen ✔️
+// Download List jenis artikel ✔️
+// Tabel data artikel ✔️
+
+
+
+
+
+@import '_table';
+@import '_sidebar';
+@import '_auto_buttom';
+@import '_humburger';
+@import '_footer';
+@import '_user';
+@import '_card';
+@import '_pdf';
+
+
+// @import url(//db.onlinewebfonts.com/c/7cc6719bd5f0310be3150ba33418e72e?family=Comic+Sans+MS);
+// $font1 :'Comic Sans MS' !important;
+
+@import url(//db.onlinewebfonts.com/c/4cc9d692753925335e7af83ecf6e6815?family=MuseoW01-900);
+$font2 :MuseoW01-900;
+
+@import url(//db.onlinewebfonts.com/c/f4bc352b52c96ca087093d36bd2396bb?family=Noteworthy);
+$font3:Noteworthy;
+
+// @import url(//db.onlinewebfonts.com/c/a78cfad3beb089a6ce86d4e280fa270b?family=Calibri);
+// $font4:Calibri;
+
+
+@font-face {
+   font-family: 'MyWebFont';
+   src: url('myfont.woff') format('woff'), /* Chrome 6+, Firefox 3.6+, IE 9+, Safari 5.1+ */
+        url('myfont.ttf') format('truetype'); /* Chrome 4+, Firefox 3.5, Opera 10+, Safari 3—5 */
+ }
+
+body,
+.btn,
+.dropdown-menu,
+.form-control,
+.custom-control-input,
+.custom-control-label:before,
+.custom-file-label, .custom-select {
+   font-size: .875rem;
+ }
+ .custom-file-input:lang(en) ~ .custom-file-label::after {
+   content: "Telusuri";
+}
+
+ .opacity-5 {
+    opacity: .5;
+ }
+
+.title-prodi{
+   font-family:$font2;
+ }
+
+.center-image{
+   object-fit: contain;
+   display: block;
+   margin-left: auto;
+   margin-right: auto;
+}
+.center-pdf{
+   width: 100%;
+   height: 100%;
+   margin: 0 auto;
+ }
+
+.object-fit-cover {
+   object-fit: cover;
+}
+
+.search input[type=search]:focus:not([readonly]) {
+   border-bottom: 1px solid #4dd0e1;
+   box-shadow: 0 1px 0 0 #4dd0e1;
+  
+ }
+ .search i:hover{
+    color: #4dd0e1;
+ }
+ .search input{
+   background-color: transparent;
+   border: none;
+   border-bottom: 1px solid #CCC;
+   color: #555;
+   max-width: calc(100% - 46px);
+ }
+ .search input.search-article{
+
+   width: 300px;
+ }
+
+ button.search{
+   border: none;
+   background-color: transparent;
+ }
+
+.detail-page .card{
+   padding: 1em;
+   border : none;
+}
+.detail-page .badge {
+   font-size: 12px;
+}
+ @media(max-width:768px){
+    h2{
+       font-size: 22px!important;
+    }
+ }
+
+ form.add span{
+    color: var(--red);
+ }
+
+ .content{
+  padding: 20px 0;
+}
+.centering-admin.card{
+  border: none;
+  padding: 2em 1em;
+}
+
+.bg-transparent {
+   background: transparent;
+}
+
+.breadcrumb {
+   background-color: #f5f5f5;
+}
+.breadcrumb a {
+   text-decoration: none;
+}
+
+.badge {
+   padding: .35rem .55rem;
+}
+
+.modal {
+   z-index: 999999;
+}
+.modal-backdrop {
+   z-index:  99999;
+}
+
+.chart-notif{
+   opacity: 0.5;
+}
+
+@media (min-width: 576px) {
+   .w-sm-auto {
+      width: auto !important;
+   }
+}
+
+
+
+
+// footer download
