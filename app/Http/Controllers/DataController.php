@@ -10,6 +10,7 @@ use App\Models\Lecturer;
 use App\Models\Achievement;
 use App\Models\StudentAchievement;
 use App\Models\Department;
+use App\Models\DepartmentHead;
 
 use Auth;
 use Maatwebsite\Excel\Facades\Excel;
@@ -246,42 +247,35 @@ class dataController extends Controller
     public function admin(Request $request)
     {
         if (!Auth::check()) {
-            return redirect('/user/login')->with('alert','Kamu harus login dulu');
+            return redirect('/user/login')->with('alert', 'Kamu harus login dulu');
         }
+
         $authUser = Auth::user();
 
-        // Scope per department (untuk non-admin)
+        // ===== Scope per department (untuk non-admin) =====
         $department_id = null;
         if ($authUser->role !== 'admin') {
-            if ($authUser->role === 'department_head' && optional($authUser->department_head)->department_id) {
-                $department_id = $authUser->department_head->department_id;
-            } elseif ($authUser->role === 'lecturer' && optional($authUser->lecturer)->department_id) {
-                $department_id = $authUser->lecturer->department_id;
+            if ($authUser->role === 'department_head') {
+                $department_id = DepartmentHead::where('user_id', $authUser->id)->value('department_id');
+            } elseif ($authUser->role === 'lecturer') {
+                $department_id = Lecturer::where('user_id', $authUser->id)->value('department_id');
             }
         }
 
-        // ====== Kartu ringkas (Global, tanpa filter) ======
-        $baseAchievements = Achievement::when($department_id, fn($q) => $q->where('department_id', $department_id))
-            ->get()
-            ->sortBy('year');
+        // ===== Kartu ringkas (Global, dihitung distinct competition+team+year+organizer per level) =====
+        $achBase = Achievement::when($department_id, fn($q) => $q->where('department_id', $department_id))->get();
 
-        $array_year_global = $baseAchievements->pluck('year')->unique()->values()->toArray();
+        $seenR = $seenN = $seenI = [];
         $region = $national = $international = 0;
-        foreach ($array_year_global as $idx => $year_data) {
-            $seenR = $seenN = $seenI = [];
-            foreach ($baseAchievements as $val) {
-                $key = $val->competition.$val->team.$val->year.$val->organizer;
-                if ($val->level === "Region" && !in_array($key, $seenR)) {
-                    $seenR[] = $key; if ($idx === 0) $region++;
-                } elseif ($val->level === "National" && !in_array($key, $seenN)) {
-                    $seenN[] = $key; if ($idx === 0) $national++;
-                } elseif ($val->level === "International" && !in_array($key, $seenI)) {
-                    $seenI[] = $key; if ($idx === 0) $international++;
-                }
-            }
+
+        foreach ($achBase as $a) {
+            $key = ($a->competition ?? '') . '|' . ($a->team ?? '') . '|' . ($a->year ?? '') . '|' . ($a->organizer ?? '');
+            if ($a->level === 'Region' && !in_array($key, $seenR, true)) { $seenR[] = $key; $region++; }
+            if ($a->level === 'National' && !in_array($key, $seenN, true)) { $seenN[] = $key; $national++; }
+            if ($a->level === 'International' && !in_array($key, $seenI, true)) { $seenI[] = $key; $international++; }
         }
 
-        // ====== Helpers ======
+        // ===== Helpers =====
         $types = [
             "Seminar Nasional",
             "Seminar Internasional",
@@ -292,8 +286,9 @@ class dataController extends Controller
         ];
 
         $academicMapper = function (int $y, int $m): ?string {
+            // Tahun akademik: 1 Sep — 31 Aug
             $cur = (int)date('Y');
-            $ay  = ($m >= 9) ? $y + 1 : $y; // Sep–Des ke tahun akademik berikutnya
+            $ay  = ($m >= 9) ? $y + 1 : $y;
             if ($ay === $cur)     return 'TS';
             if ($ay === $cur - 1) return 'TS_1';
             if ($ay === $cur - 2) return 'TS_2';
@@ -301,10 +296,11 @@ class dataController extends Controller
         };
 
         $buildArticleRange = function (Request $r, string $prefix) {
-            $sm = (int) $r->get("{$prefix}_start_month");
-            $sy = (int) $r->get("{$prefix}_start_year");
-            $em = (int) $r->get("{$prefix}_end_month");
-            $ey = (int) $r->get("{$prefix}_end_year");
+            $sm = (int)$r->get("{$prefix}_start_month");
+            $sy = (int)$r->get("{$prefix}_start_year");
+            $em = (int)$r->get("{$prefix}_end_month");
+            $ey = (int)$r->get("{$prefix}_end_year");
+
             if ($sm && $sy && $em && $ey) {
                 $from = Carbon::createFromDate($sy, $sm, 1)->startOfMonth();
                 $to   = Carbon::createFromDate($ey, $em, 1)->endOfMonth();
@@ -315,10 +311,11 @@ class dataController extends Controller
         };
 
         $buildAchRange = function (Request $r, string $prefix) {
-            $sm = (int) $r->get("{$prefix}_start_month");
-            $sy = (int) $r->get("{$prefix}_start_year");
-            $em = (int) $r->get("{$prefix}_end_month");
-            $ey = (int) $r->get("{$prefix}_end_year");
+            $sm = (int)$r->get("{$prefix}_start_month");
+            $sy = (int)$r->get("{$prefix}_start_year");
+            $em = (int)$r->get("{$prefix}_end_month");
+            $ey = (int)$r->get("{$prefix}_end_year");
+
             if ($sm && $sy && $em && $ey) {
                 $ym_from = ($sy * 100) + $sm;
                 $ym_to   = ($ey * 100) + $em;
@@ -329,17 +326,22 @@ class dataController extends Controller
         };
 
         $computeArticleTSArrays = function ($articles, array $types, ?string $categoryFilter) use ($academicMapper) {
-            $TS = $TS1 = $TS2 = array_fill(0, count($types), 0);
+            $TS  = array_fill(0, count($types), 0);
+            $TS1 = array_fill(0, count($types), 0);
+            $TS2 = array_fill(0, count($types), 0);
+
             foreach ($types as $idx => $t) {
                 foreach ($articles as $a) {
                     if ($a->type_journal !== $t) continue;
                     if ($categoryFilter && $a->category !== $categoryFilter) continue;
-                    $y = (int) date('Y', strtotime($a->date));
-                    $m = (int) date('m', strtotime($a->date));
+
+                    $y = (int)date('Y', strtotime($a->date));
+                    $m = (int)date('m', strtotime($a->date));
                     $bucket = $academicMapper($y, $m);
-                    if ($bucket === 'TS') $TS[$idx]++;
-                    elseif ($bucket === 'TS_1') $TS1[$idx]++;
-                    elseif ($bucket === 'TS_2') $TS2[$idx]++;
+
+                    if ($bucket === 'TS')      { $TS[$idx]++;  }
+                    elseif ($bucket === 'TS_1'){ $TS1[$idx]++; }
+                    elseif ($bucket === 'TS_2'){ $TS2[$idx]++; }
                 }
             }
             return [$TS, $TS1, $TS2];
@@ -348,68 +350,78 @@ class dataController extends Controller
         $computeAchievementSeries = function ($achievements) {
             $years = collect($achievements)->pluck('year')->unique()->values()->sort()->toArray();
             $region = $national = $international = [];
+
             foreach ($years as $y) {
                 $seenR = $seenN = $seenI = [];
                 $r = $n = $i = 0;
                 foreach ($achievements as $a) {
                     if ((int)$a->year !== (int)$y) continue;
-                    $key = $a->competition.$a->team.$a->year.$a->organizer;
-                    if ($a->level === 'Region' && !in_array($key, $seenR)) { $seenR[] = $key; $r++; }
-                    if ($a->level === 'National' && !in_array($key, $seenN)) { $seenN[] = $key; $n++; }
-                    if ($a->level === 'International' && !in_array($key, $seenI)) { $seenI[] = $key; $i++; }
+                    $key = ($a->competition ?? '') . '|' . ($a->team ?? '') . '|' . ($a->year ?? '') . '|' . ($a->organizer ?? '');
+                    if ($a->level === 'Region'        && !in_array($key, $seenR, true)) { $seenR[] = $key; $r++; }
+                    if ($a->level === 'National'      && !in_array($key, $seenN, true)) { $seenN[] = $key; $n++; }
+                    if ($a->level === 'International' && !in_array($key, $seenI, true)) { $seenI[] = $key; $i++; }
                 }
-                $region[] = $r; $national[] = $n; $international[] = $i;
+                $region[] = $r;
+                $national[] = $n;
+                $international[] = $i;
             }
+
             return [$years, $region, $national, $international];
         };
 
-        // ===== (1) GRAFIK PRESTASI (Between only) =====
+        // ===== (1) Grafik Prestasi (Between only) =====
         [$ach_ym_from, $ach_ym_to, $ach_sm, $ach_sy, $ach_em, $ach_ey] = $buildAchRange($request, 'ach');
 
         $achievementsForChart = Achievement::when($department_id, fn($q) => $q->where('department_id', $department_id))
             ->when($ach_ym_from && $ach_ym_to, fn($q) =>
-                $q->whereRaw('(year * 100 + month) between ? and ?', [$ach_ym_from, $ach_ym_to]))
+                $q->whereRaw('(year * 100 + month) between ? and ?', [$ach_ym_from, $ach_ym_to])
+            )
             ->get();
 
         [$ach_year_array, $ach_region_array, $ach_national_array, $ach_international_array] =
             $computeAchievementSeries($achievementsForChart);
 
-        // ===== (2) GRAFIK ARTIKEL (Between only) =====
+        // ===== (2) Grafik Artikel (Between only) =====
         [$art_date_from, $art_date_to, $art_sm, $art_sy, $art_em, $art_ey] = $buildArticleRange($request, 'art');
 
-        $articlesChart = Article::when($department_id, fn($q)=>$q->where('department_id',$department_id))
-            ->when($art_date_from && $art_date_to, fn($q)=>$q->whereBetween('date', [$art_date_from,$art_date_to]))
+        $articlesChart = Article::when($department_id, fn($q) => $q->where('department_id', $department_id))
+            ->when($art_date_from && $art_date_to, fn($q) => $q->whereBetween('date', [$art_date_from, $art_date_to]))
             ->get();
 
         [$art_TS_array_all, $art_TS_1_array_all, $art_TS_2_array_all] =
             $computeArticleTSArrays($articlesChart, $types, null);
 
-        // ===== (3) TABEL 5 PRESTASI TERAKHIR (Between only) =====
+        // ===== (3) Tabel 5 Prestasi Terakhir (Between only) =====
         [$last_ym_from, $last_ym_to, $last_sm, $last_sy, $last_em, $last_ey] = $buildAchRange($request, 'last');
 
         $data_limit = StudentAchievement::with(['student', 'achievement'])
-            ->when($department_id, fn($q) => $q->whereHas('achievement', fn($q2) => $q2->where('department_id', $department_id)))
+            ->when($department_id, fn($q) =>
+                $q->whereHas('achievement', fn($qq) => $qq->where('department_id', $department_id))
+            )
             ->when($last_ym_from && $last_ym_to, fn($q) =>
-                $q->whereHas('achievement', fn($qq) => $qq->whereRaw('(year * 100 + month) between ? and ?', [$last_ym_from, $last_ym_to])))
+                $q->whereHas('achievement', fn($qq) =>
+                    $qq->whereRaw('(year * 100 + month) between ? and ?', [$last_ym_from, $last_ym_to])
+                )
+            )
             ->orderByDesc('id')
             ->take(5)
             ->get();
 
-        // ===== (4) TABEL Dosen & Mahasiswa (Between only) =====
+        // ===== (4) Tabel Dosen & Mahasiswa (Between only) =====
         [$mix_date_from, $mix_date_to, $mix_sm, $mix_sy, $mix_em, $mix_ey] = $buildArticleRange($request, 'mix');
 
-        $articlesMix = Article::when($department_id, fn($q)=>$q->where('department_id',$department_id))
-            ->when($mix_date_from && $mix_date_to, fn($q)=>$q->whereBetween('date', [$mix_date_from,$mix_date_to]))
+        $articlesMix = Article::when($department_id, fn($q) => $q->where('department_id', $department_id))
+            ->when($mix_date_from && $mix_date_to, fn($q) => $q->whereBetween('date', [$mix_date_from, $mix_date_to]))
             ->get();
 
         [$mix_TS_array, $mix_TS_1_array, $mix_TS_2_array] =
             $computeArticleTSArrays($articlesMix, $types, null);
 
-        // ===== (5) TABEL Dosen saja (Between only) =====
+        // ===== (5) Tabel Dosen (Between only) =====
         [$lec_date_from, $lec_date_to, $lec_sm, $lec_sy, $lec_em, $lec_ey] = $buildArticleRange($request, 'lec');
 
-        $articlesLec = Article::when($department_id, fn($q)=>$q->where('department_id',$department_id))
-            ->when($lec_date_from && $lec_date_to, fn($q)=>$q->whereBetween('date', [$lec_date_from,$lec_date_to]))
+        $articlesLec = Article::when($department_id, fn($q) => $q->where('department_id', $department_id))
+            ->when($lec_date_from && $lec_date_to, fn($q) => $q->whereBetween('date', [$lec_date_from, $lec_date_to]))
             ->get();
 
         [$lec_TS_array, $lec_TS_1_array, $lec_TS_2_array] =
@@ -451,6 +463,8 @@ class dataController extends Controller
             'mix_TS_array'    => $mix_TS_array,
             'mix_TS_1_array'  => $mix_TS_1_array,
             'mix_TS_2_array'  => $mix_TS_2_array,
+            'mix_date_from'   => $mix_date_from,
+            'mix_date_to'     => $mix_date_to,
 
             // Dosen
             'lec_start_month' => $lec_sm, 'lec_start_year' => $lec_sy,
@@ -458,10 +472,10 @@ class dataController extends Controller
             'lec_TS_array'    => $lec_TS_array,
             'lec_TS_1_array'  => $lec_TS_1_array,
             'lec_TS_2_array'  => $lec_TS_2_array,
+            'lec_date_from'   => $lec_date_from,
+            'lec_date_to'     => $lec_date_to,
         ]);
     }
-
-
 
     public function akademik(Request $request)
     {

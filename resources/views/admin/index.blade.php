@@ -132,7 +132,7 @@
         </div>
       </div>
 
-      {{-- ====== 5 Prestasi Terakhir + Filter (Between) ====== --}}
+      {{-- ====== 5 Prestasi Terakhir ====== --}}
       <h4 class="font-weight-bold my-3 mt-md-4">5 Prestasi Terakhir</h4>
       <div class="card rounded shadow mt-2 mb-4">
         <div class="card-body">
@@ -197,7 +197,7 @@
         </div>
       </div>
 
-      {{-- ====== Dosen & Mahasiswa + Filter (Between) ====== --}}
+      {{-- ====== Dosen & Mahasiswa (klik angka → list) ====== --}}
       <div class="d-md-flex align-items-center justify-content-between mx-1 mt-1 mb-2">
         <h4 class="font-weight-bold my-2 mt-md-3">Dosen dan Mahasiswa</h4>
         <a href="{{ route('article-mahasiswa') }}" class="btn btn-outline-primary my-2 my-md-0">
@@ -252,20 +252,28 @@
                 </tr>
               </thead>
               <tbody>
-              @foreach($data_type_array as $type)
+              @foreach($data_type_array as $idx => $type)
+                @php
+                  $typeParam = urlencode($type);
+                  $s = $mix_date_from ?? '';
+                  $e = $mix_date_to   ?? '';
+                  $ts2 = (int)($mix_TS_2_array[$idx] ?? 0);
+                  $ts1 = (int)($mix_TS_1_array[$idx] ?? 0);
+                  $ts  = (int)($mix_TS_array[$idx]    ?? 0);
+                @endphp
                 <tr>
                   <td>{{ $loop->iteration }}</td>
                   <td class="text-left">{{ $type }}</td>
-                  <td>{{ isset($mix_TS_2_array[$loop->iteration-1]) ? $mix_TS_2_array[$loop->iteration-1] : 0 }}</td>
-                  <td>{{ isset($mix_TS_1_array[$loop->iteration-1]) ? $mix_TS_1_array[$loop->iteration-1] : 0 }}</td>
-                  <td>{{ isset($mix_TS_array[$loop->iteration-1])    ? $mix_TS_array[$loop->iteration-1]    : 0 }}</td>
                   <td>
-                    {{
-                      (isset($mix_TS_2_array[$loop->iteration-1]) ? $mix_TS_2_array[$loop->iteration-1] : 0) +
-                      (isset($mix_TS_1_array[$loop->iteration-1]) ? $mix_TS_1_array[$loop->iteration-1] : 0) +
-                      (isset($mix_TS_array[$loop->iteration-1])    ? $mix_TS_array[$loop->iteration-1]    : 0)
-                    }}
+                    <a href="{{ route('stats.articles.bucket', ['category'=>'mix','bucket'=>'TS-2','type'=>$typeParam]) }}@if($s && $e)?start={{ $s }}&end={{ $e }}@endif">{{ $ts2 }}</a>
                   </td>
+                  <td>
+                    <a href="{{ route('stats.articles.bucket', ['category'=>'mix','bucket'=>'TS-1','type'=>$typeParam]) }}@if($s && $e)?start={{ $s }}&end={{ $e }}@endif">{{ $ts1 }}</a>
+                  </td>
+                  <td>
+                    <a href="{{ route('stats.articles.bucket', ['category'=>'mix','bucket'=>'TS','type'=>$typeParam]) }}@if($s && $e)?start={{ $s }}&end={{ $e }}@endif">{{ $ts }}</a>
+                  </td>
+                  <td>{{ $ts2 + $ts1 + $ts }}</td>
                 </tr>
               @endforeach
               </tbody>
@@ -274,7 +282,7 @@
         </div>
       </div>
 
-      {{-- ====== Dosen + Filter (Between) ====== --}}
+      {{-- ====== Dosen (klik angka → list) ====== --}}
       <div class="d-md-flex align-items-center justify-content-between mx-1 mt-3 mb-2">
         <h4 class="font-weight-bold my-2 mt-md-3">Dosen</h4>
         <a href="{{ route('article-dosen') }}" class="btn btn-outline-primary my-2 my-md-0">
@@ -329,20 +337,28 @@
                 </tr>
               </thead>
               <tbody>
-              @foreach($data_type_array as $type)
+              @foreach($data_type_array as $idx => $type)
+                @php
+                  $typeParam = urlencode($type);
+                  $s = $lec_date_from ?? '';
+                  $e = $lec_date_to   ?? '';
+                  $ts2 = (int)($lec_TS_2_array[$idx] ?? 0);
+                  $ts1 = (int)($lec_TS_1_array[$idx] ?? 0);
+                  $ts  = (int)($lec_TS_array[$idx]    ?? 0);
+                @endphp
                 <tr>
                   <td>{{ $loop->iteration }}</td>
                   <td class="text-left">{{ $type }}</td>
-                  <td>{{ isset($lec_TS_2_array[$loop->iteration-1]) ? $lec_TS_2_array[$loop->iteration-1] : 0 }}</td>
-                  <td>{{ isset($lec_TS_1_array[$loop->iteration-1]) ? $lec_TS_1_array[$loop->iteration-1] : 0 }}</td>
-                  <td>{{ isset($lec_TS_array[$loop->iteration-1])    ? $lec_TS_array[$loop->iteration-1]    : 0 }}</td>
                   <td>
-                    {{
-                      (isset($lec_TS_2_array[$loop->iteration-1]) ? $lec_TS_2_array[$loop->iteration-1] : 0) +
-                      (isset($lec_TS_1_array[$loop->iteration-1]) ? $lec_TS_1_array[$loop->iteration-1] : 0) +
-                      (isset($lec_TS_array[$loop->iteration-1])    ? $lec_TS_array[$loop->iteration-1]    : 0)
-                    }}
+                    <a href="{{ route('stats.articles.bucket', ['category'=>'dosen','bucket'=>'TS-2','type'=>$typeParam]) }}@if($s && $e)?start={{ $s }}&end={{ $e }}@endif">{{ $ts2 }}</a>
                   </td>
+                  <td>
+                    <a href="{{ route('stats.articles.bucket', ['category'=>'dosen','bucket'=>'TS-1','type'=>$typeParam]) }}@if($s && $e)?start={{ $s }}&end={{ $e }}@endif">{{ $ts1 }}</a>
+                  </td>
+                  <td>
+                    <a href="{{ route('stats.articles.bucket', ['category'=>'dosen','bucket'=>'TS','type'=>$typeParam]) }}@if($s && $e)?start={{ $s }}&end={{ $e }}@endif">{{ $ts }}</a>
+                  </td>
+                  <td>{{ $ts2 + $ts1 + $ts }}</td>
                 </tr>
               @endforeach
               </tbody>
@@ -359,23 +375,20 @@
 
 @section('js')
 <script>
-  // ========= Data dari backend (aman untuk Laravel 8) =========
-  // Prestasi (chart)
-  var ach_year          = @json(isset($ach_year_array) ? $ach_year_array : []);
-  var ach_region        = @json(isset($ach_region_array) ? $ach_region_array : []);
-  var ach_national      = @json(isset($ach_national_array) ? $ach_national_array : []);
-  var ach_international = @json(isset($ach_international_array) ? $ach_international_array : []);
+  // ========= Data dari backend =========
+  var ach_year          = @json($ach_year_array ?? []);
+  var ach_region        = @json($ach_region_array ?? []);
+  var ach_national      = @json($ach_national_array ?? []);
+  var ach_international = @json($ach_international_array ?? []);
 
-  // Artikel (chart)
-  var data_type_array    = @json(isset($data_type_array) ? $data_type_array : []);
+  var data_type_array    = @json($data_type_array ?? []);
   if (!Array.isArray(data_type_array) || data_type_array.length === 0) {
     data_type_array = ["S N","S I","J I","J I B","J N T","J N T T"];
   }
-  var art_TS_array_all   = @json(isset($art_TS_array_all) ? $art_TS_array_all : []);
-  var art_TS_1_array_all = @json(isset($art_TS_1_array_all) ? $art_TS_1_array_all : []);
-  var art_TS_2_array_all = @json(isset($art_TS_2_array_all) ? $art_TS_2_array_all : []);
+  var art_TS_array_all   = @json($art_TS_array_all ?? []);
+  var art_TS_1_array_all = @json($art_TS_1_array_all ?? []);
+  var art_TS_2_array_all = @json($art_TS_2_array_all ?? []);
 
-  // ========= Render Chart Prestasi (Radar) =========
   (function renderPrestasi() {
     if (typeof Chart === 'undefined') return;
     var el = document.getElementById('chart_ach');
@@ -395,14 +408,9 @@
       maintainAspectRatio: false
     };
 
-    if (typeof Chart.Radar === 'function') {
-      Chart.Radar(el.id, { data: data, options: options });
-    } else {
-      new Chart(el.getContext('2d'), { type: 'radar', data: data, options: options });
-    }
+    new Chart(el.getContext('2d'), { type: 'radar', data: data, options: options });
   })();
 
-  // ========= Render Chart Artikel (Radar) =========
   (function renderArtikel() {
     if (typeof Chart === 'undefined') return;
     var el = document.getElementById('chart_art');
@@ -422,11 +430,7 @@
       maintainAspectRatio: false
     };
 
-    if (typeof Chart.Radar === 'function') {
-      Chart.Radar(el.id, { data: data, options: options });
-    } else {
-      new Chart(el.getContext('2d'), { type: 'radar', data: data, options: options });
-    }
+    new Chart(el.getContext('2d'), { type: 'radar', data: data, options: options });
   })();
 </script>
 @endsection

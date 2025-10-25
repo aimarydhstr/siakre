@@ -10,6 +10,8 @@ use App\Http\Controllers\UserController;
 use App\Http\Controllers\LecturerController;
 use App\Http\Controllers\CooperationController;
 use App\Http\Controllers\IaController;
+use App\Http\Controllers\ArticleStatsController;
+
 
 /*
 |--------------------------------------------------------------------------
@@ -92,6 +94,17 @@ Route::group(['middleware' => ['auth']], function() {
     Route::get('/article/edit/{id}',[ArticleController::class,'edit'],function($id){})->name('edit_article');
     Route::post('/article/update/{id}',[ArticleController::class,'update'],function($id){})->name('update_article');
     Route::delete('/deleteArticle/{id}',[ArticleController::class, 'destroy'],function($id){})->name('delete_article');
+
+    Route::get('/stats/articles/{category}/{bucket}/{type}', [ArticleStatsController::class, 'bucket'])
+    ->where([
+        // hanya izinkan 3 nilai ini
+        'category' => '^(dosen|mahasiswa|mix)$',
+        // bucket TS / TS-1 / TS-2
+        'bucket'   => '^(TS|TS\-1|TS\-2)$',
+        // jenis publikasi: biarkan apa saja (ada spasi, dll) sampai '/'
+        'type'     => '.+',
+    ])
+    ->name('stats.articles.bucket');
 
     // ----------------------prodi----------------------
     Route::get('/prodi',[DepartmentController::class,'index'])->name('departments.index');

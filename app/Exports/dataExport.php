@@ -2,7 +2,7 @@
 
 namespace App\Exports;
 
-use App\Models\data;
+use App\Models\Achievement;
 use Maatwebsite\Excel\Concerns\FromCollection;
 
 class dataExport implements FromCollection
@@ -12,7 +12,7 @@ class dataExport implements FromCollection
     */
     public function collection()
     {
-        return data::all();
+        return Achievement::all();
     }
 }
 

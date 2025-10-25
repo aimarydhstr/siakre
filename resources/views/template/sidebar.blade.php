@@ -89,7 +89,7 @@
           </div>
           <div class="col-12 my-3">
             <a class="btn rounded-pill d-flex align-items-center justify-content-center py-3 px-4 btn-outline-success"
-               href="{{ route('article-select') }}">
+               href="{{ route('article-add') }}">
               <h5 class="mb-0"><i class="fas fa-book-open"></i> Tambah Artikel</h5>
             </a>
           </div>

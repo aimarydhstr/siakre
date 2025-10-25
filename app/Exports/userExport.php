@@ -1,111 +1,81 @@
 <?php
+
 namespace App\Exports;
 
-use App\Models\data;
+use App\Models\Achievement;
 use Illuminate\Contracts\View\View;
 use Maatwebsite\Excel\Concerns\Exportable;
 use Maatwebsite\Excel\Concerns\FromView;
 
 class userExport implements FromView
 {
-    
-    private $field ;
     use Exportable;
-    public function setAkademik(){
-        $this->field ="Akademik";
-    }
-    public function setNonAkademik(){
-        $this->field ="NonAkademik";
-    }
+
+    /** @var string|null 'Akademik'|'NonAkademik' */
+    private ?string $field = null;
+
+    public function setAkademik()    { $this->field = 'Akademik';    return $this; }
+    public function setNonAkademik() { $this->field = 'NonAkademik'; return $this; }
+
     public function view(): View
     {
+        // Ambil semua achievement sesuai bidang
+        $all = Achievement::query()
+            ->when($this->field, fn($q) => $q->where('field', $this->field))
+            ->get(['team','field','level','competition','organizer','year']);
 
-      $count_year = 0;
-      $region_val = 0;
-      $national_val = 0;
-      $international_val = 0;
+        // Kumpulkan daftar tahun unik (desc)
+        $years = $all->pluck('year')->filter()->unique()->sortDesc()->values()->all();
 
-      $array_year = [];
-      $region_val_array = [];
-      $national_val_array = [];
-      $international_val_array = [];
+        // Siapkan struktur hasil
+        $regionCounts = [];
+        $nationalCounts = [];
+        $internationalCounts = [];
 
+        // Hitung per tahun
+        foreach ($years as $y) {
+            // Set untuk deduplikasi
+            $seenRegion = [];
+            $seenNational = [];
+            $seenInternational = [];
 
+            foreach ($all as $row) {
+                if ((int)$row->year !== (int)$y) continue;
 
-      $all = data::all()->sortByDesc("year");
+                // kunci unik per kompetisi / tim / penyelenggara / tahun
+                $key = trim(($row->competition ?? ''))
+                    .'|'.trim(($row->team ?? ''))
+                    .'|'.trim(($row->organizer ?? ''))
+                    .'|'.(string)$y;
 
-      foreach($all as $val){
-          if($val->field ==$this->field){
-              if(!in_array( $val->year,$array_year)){
-                  $array_year[] = $val->year;
-              }
-          }
-      }
+                $level = $row->level;
 
-      foreach($array_year as $year_data){
+                if ($level === 'Region') {
+                    if (!isset($seenRegion[$key])) {
+                        $seenRegion[$key] = true;
+                    }
+                } elseif ($level === 'National') {
+                    if (!isset($seenNational[$key])) {
+                        $seenNational[$key] = true;
+                    }
+                } elseif ($level === 'International') {
+                    if (!isset($seenInternational[$key])) {
+                        $seenInternational[$key] = true;
+                    }
+                }
+            }
 
-          $count_year +=1;
-          $array_competition_region = [];
-          $array_competition_national = [];
-          $array_competition_international = [];
+            $regionCounts[]        = count($seenRegion);
+            $nationalCounts[]      = count($seenNational);
+            $internationalCounts[] = count($seenInternational);
+        }
 
-          foreach($all as $val){
-
-              $level = $val->level;
-              $competition = $val->competition;
-              $organizer = $val->organizer;
-              $year = $val->year;
-              $team = $val->team;
-
-              if($val->field ==$this->field){
-                  if ($level =="Region"){
-
-                      if(!in_array($competition.$team.$year.$organizer, $array_competition_region)){
-                          $array_competition_region [] = $competition.$team.$year.$organizer;
-
-                          if($year_data == $year){
-                              $region_val +=1;
-                          }
-                      }
-                  }
-                  else if ($level =="National"){
-
-                      if(!in_array($competition.$team.$year.$organizer, $array_competition_national)){
-                          $array_competition_national [] = $competition.$team.$year.$organizer;
-                       
-                          if($year_data == $year){
-                              $national_val +=1;
-                          }
-                      }
-                  }
-                  else if ($level =="International"){
-
-                      if(!in_array($competition.$team.$year.$organizer, $array_competition_international)){
-                          $array_competition_international [] = $competition.$team.$year.$organizer;
-                        
-                          if($year_data == $year){
-                              $international_val +=1;
-                          }
-                      }
-                  }
-              }
-          }
-          $region_val_array[] = $region_val;
-          $national_val_array[] = $national_val;
-          $international_val_array[] = $international_val;
-
-          // reset nilai
-          $region_val = 0;
-          $national_val = 0;
-          $international_val = 0;
-      }
-      
-      return view('excel.export',[
-      'year_array'=>$array_year,
-      'region_array' => $region_val_array,
-      'national_array' => $national_val_array,
-      'international_array' => $international_val_array,
-      ]);
+        // Render ke blade yang sudah kamu pakai
+        return view('excel.export', [
+            'year_array'         => $years,
+            'region_array'       => $regionCounts,
+            'national_array'     => $nationalCounts,
+            'international_array'=> $internationalCounts,
+        ]);
     }
 }
-
