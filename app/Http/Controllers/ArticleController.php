@@ -129,16 +129,16 @@ class ArticleController extends Controller
     public function store(Request $request)
     {
         if (!Auth::check()) {
-            return redirect('/user/login')->with('alert','Kamu harus login dulu');
+            return redirect('/user/login')->with('alert', 'Kamu harus login dulu');
         }
 
         $auth = Auth::user();
 
-        // Tentukan department_id (admin pilih; non-admin ikut departemen akunnya)
+        // Tentukan department_id
         $departmentId = null;
         if ($auth->role === 'admin') {
             $request->validate([
-                'department_id' => ['required','exists:departments,id'],
+                'department_id' => ['required', 'exists:departments,id'],
             ]);
             $departmentId = (int) $request->department_id;
         } elseif ($auth->role === 'department_head') {
@@ -151,40 +151,38 @@ class ArticleController extends Controller
             return back()->withErrors(['general' => 'Akun belum terhubung ke Program Studi.'])->withInput();
         }
 
-        // Validasi utama (DOI wajib & unik)
+        // Validasi utama
         $request->validate([
             'title'        => 'required|string|max:255',
             'type_journal' => 'required|in:Seminar Nasional,Seminar Internasional,Jurnal Internasional,Jurnal Internasional Bereputasi,Jurnal Nasional Terakreditasi,Jurnal Nasional Tidak Terakreditasi',
             'url'          => 'required|url|max:500',
             'doi'          => 'required|string|max:255|unique:articles,doi',
             'publisher'    => 'required|string|max:255',
-            'date'         => 'required|string', // dd-mm-yyyy
+            'date'         => 'required|string',
             'category'     => 'required|in:dosen,mahasiswa,gabungan',
             'volume'       => 'nullable|string|max:50',
             'number'       => 'nullable|string|max:50',
-            'file'         => 'required|mimes:pdf|max:10240', // maks 10MB
+            'file'         => 'required|mimes:pdf|max:10240',
 
-            // Penulis dosen (opsional)
             'lecturer_ids'   => 'nullable|array',
             'lecturer_ids.*' => 'nullable|exists:lecturers,id',
 
-            // Penulis mahasiswa (opsional, dinamis)
             'student_names'   => 'nullable|array',
             'student_names.*' => 'nullable|string|max:255',
             'student_nims'    => 'nullable|array',
             'student_nims.*'  => 'nullable|string|max:50',
         ]);
 
-        // Parse tanggal dd-mm-yyyy -> Y-m-d
+        // Parse tanggal
         try {
             $date = Carbon::createFromFormat('d-m-Y', $request->date)->format('Y-m-d');
         } catch (\Throwable $e) {
             return back()->withErrors(['date' => 'Format tanggal harus dd-mm-yyyy.'])->withInput();
         }
 
-        // Upload file PDF
+        // Upload file
         $pdf = $request->file('file');
-        $fileName = time().'_'.$pdf->getClientOriginalName();
+        $fileName = time() . '_' . $pdf->getClientOriginalName();
         $pdf->move(public_path('article'), $fileName);
 
         // Simpan artikel
@@ -202,55 +200,51 @@ class ArticleController extends Controller
             'file'          => $fileName,
         ]);
 
-        // -------- Penulis Dosen (pivot lecturer_articles) --------
-        // dari dropdown lecturer_ids[]
+        // -------- Penulis Dosen --------
         $lecturerIds = collect($request->input('lecturer_ids', []))
-            ->filter(function ($x) { return !empty($x); })
-            ->map(function ($x) { return (int) $x; })
+            ->filter(fn($x) => !empty($x))
+            ->map(fn($x) => (int)$x)
             ->unique()
             ->values();
 
         if ($lecturerIds->isNotEmpty()) {
-            $pairs = [];
-            foreach ($lecturerIds as $lid) {
-                $pairs[] = ['lecturer_id' => $lid, 'article_id' => $article->id];
-            }
-            if (!empty($pairs)) {
-                LecturerArticle::insert($pairs);
-            }
+            $pairs = $lecturerIds->map(fn($lid) => [
+                'lecturer_id' => $lid,
+                'article_id'  => $article->id
+            ])->toArray();
+
+            LecturerArticle::insert($pairs);
         }
 
-        // -------- Penulis Mahasiswa (pivot student_articles) --------
+        // -------- Penulis Mahasiswa (NIM unik global) --------
         $studentNames = $request->input('student_names', []);
         $studentNims  = $request->input('student_nims', []);
         $rows = max(count($studentNames), count($studentNims));
 
         for ($i = 0; $i < $rows; $i++) {
-            $name = trim(isset($studentNames[$i]) ? $studentNames[$i] : '');
-            $nim  = trim(isset($studentNims[$i])  ? $studentNims[$i]  : '');
-            if ($name === '' && $nim === '') {
-                continue; // skip baris kosong
-            }
+            $name = trim($studentNames[$i] ?? '');
+            $nim  = trim($studentNims[$i] ?? '');
 
-            // Cari/buat student pada departemen terkait
+            if ($name === '' && $nim === '') continue;
+
             $student = null;
             if ($nim !== '') {
-                $student = Student::where('nim', $nim)
-                    ->where('department_id', $departmentId)
-                    ->first();
+                $student = Student::where('nim', $nim)->first();
             }
+
             if (!$student) {
                 $student = Student::create([
                     'nim'           => $nim,
-                    'name'          => $name !== '' ? $name : $nim, // fallback
+                    'name'          => $name !== '' ? $name : $nim,
                     'photo'         => null,
                     'department_id' => $departmentId,
                 ]);
             } else {
-                // update nama jika diisi (agar sinkron)
-                if ($name !== '') {
-                    $student->name = $name;
-                    $student->save();
+                if ($name !== '' && $student->name !== $name) {
+                    if (empty($student->name) || strlen($student->name) < strlen($name)) {
+                        $student->name = $name;
+                        $student->save();
+                    }
                 }
             }
 
@@ -260,7 +254,6 @@ class ArticleController extends Controller
             ]);
         }
 
-        // Redirect ke index artikel (ganti route bila beda)
         return redirect()->route('article')->with('status', 'Artikel berhasil ditambahkan');
     }
 
@@ -434,183 +427,123 @@ class ArticleController extends Controller
      */
     public function update(Request $request, $id)
     {
-        if (!Auth::check()) {
-            return redirect('/user/login')->with('alert','Kamu harus login dulu');
-        }
-
-        $auth = Auth::user();
-
-        // Ambil artikel
         $article = Article::findOrFail($id);
 
-        // Tentukan department_id (admin pilih; non-admin ikut prodi akun)
-        $departmentId = null;
-        if ($auth->role === 'admin') {
-            $request->validate([
-                'department_id' => ['required','exists:departments,id'],
-            ]);
-            $departmentId = (int) $request->department_id;
-        } elseif ($auth->role === 'department_head') {
-            $departmentId = DepartmentHead::where('user_id', $auth->id)->value('department_id');
-        } elseif ($auth->role === 'lecturer') {
-            $departmentId = Lecturer::where('user_id', $auth->id)->value('department_id');
-        }
-
-        if (!$departmentId) {
-            return back()->withErrors(['general' => 'Akun belum terhubung ke Program Studi.'])->withInput();
-        }
-
-        // Otorisasi non-admin
-        if ($auth->role !== 'admin' && (int)$article->department_id !== (int)$departmentId) {
-            abort(403, 'Anda tidak memiliki akses ke data departemen ini.');
-        }
-
-        // Validasi (DOI unik kecuali dirinya)
+        // Validasi dasar
         $request->validate([
             'title'        => 'required|string|max:255',
             'type_journal' => 'required|in:Seminar Nasional,Seminar Internasional,Jurnal Internasional,Jurnal Internasional Bereputasi,Jurnal Nasional Terakreditasi,Jurnal Nasional Tidak Terakreditasi',
             'url'          => 'required|url|max:500',
-            'doi'          => 'required|string|max:255|unique:articles,doi,'.$article->id,
+            'doi'          => 'required|string|max:255|unique:articles,doi,' . $article->id,
             'publisher'    => 'required|string|max:255',
-            'date'         => 'required|string', // dd-mm-yyyy
-            'category'     => 'required|in:dosen,mahasiswa',
+            'date'         => 'required|string',
+            'category'     => 'required|in:dosen,mahasiswa,gabungan',
             'volume'       => 'nullable|string|max:50',
             'number'       => 'nullable|string|max:50',
-            'file'         => 'nullable|mimes:pdf|max:10240', // boleh kosong saat edit
+            'file'         => 'nullable|mimes:pdf|max:10240',
 
-            // Dosen
             'lecturer_ids'   => 'nullable|array',
             'lecturer_ids.*' => 'nullable|exists:lecturers,id',
 
-            // Mahasiswa
             'student_names'   => 'nullable|array',
             'student_names.*' => 'nullable|string|max:255',
             'student_nims'    => 'nullable|array',
             'student_nims.*'  => 'nullable|string|max:50',
         ]);
 
-        if ($request->category === 'dosen') {
-            $request->validate(['lecturer_ids' => 'required|array|min:1']);
-        } else { // mahasiswa
-            $request->validate([
-                'lecturer_ids'  => 'required|array|min:1',
-                'student_names' => 'required|array|min:1',
-            ]);
-        }
-
-        // Parse tanggal
+        // Format tanggal
         try {
             $date = Carbon::createFromFormat('d-m-Y', $request->date)->format('Y-m-d');
         } catch (\Throwable $e) {
             return back()->withErrors(['date' => 'Format tanggal harus dd-mm-yyyy.'])->withInput();
         }
 
-        // Handle file PDF (opsional ganti)
-        $fileName = $article->file; // default keep
+        // Update file jika ada upload baru
+        $fileName = $article->file;
         if ($request->hasFile('file')) {
             $pdf = $request->file('file');
-            $newName = time().'_'.$pdf->getClientOriginalName();
-            $pdf->move(public_path('article'), $newName);
-            // Hapus file lama jika ada
-            if ($article->file) {
-                $oldPath = public_path('article/'.$article->file);
-                if (File::exists($oldPath)) {
-                    File::delete($oldPath);
-                }
+            $fileName = time() . '_' . $pdf->getClientOriginalName();
+            $pdf->move(public_path('article'), $fileName);
+
+            // Hapus file lama (optional)
+            $oldPath = public_path('article/' . $article->file);
+            if (file_exists($oldPath)) {
+                unlink($oldPath);
             }
-            $fileName = $newName;
         }
 
-        // Update kolom Article
-        $article->department_id = $departmentId;
-        $article->title         = $request->title;
-        $article->type_journal  = $request->type_journal;
-        $article->url           = $request->url;
-        $article->doi           = $request->doi;
-        $article->publisher     = $request->publisher;
-        $article->date          = $date;
-        $article->category      = $request->category;
-        $article->volume        = $request->volume ?: null;
-        $article->number        = $request->number ?: null;
-        $article->file          = $fileName;
-        $article->save();
+        // Update artikel
+        $article->update([
+            'title'        => $request->title,
+            'type_journal' => $request->type_journal,
+            'url'          => $request->url,
+            'doi'          => $request->doi,
+            'publisher'    => $request->publisher,
+            'date'         => $date,
+            'category'     => $request->category,
+            'volume'       => $request->volume ?: null,
+            'number'       => $request->number ?: null,
+            'file'         => $fileName,
+        ]);
 
-        // ------- Sinkron Penulis Dosen -------
+        // -------- Update Penulis Dosen --------
         LecturerArticle::where('article_id', $article->id)->delete();
-        $lecturerIdsInput = $request->input('lecturer_ids', []);
-        $lecturerIds = [];
-        if (is_array($lecturerIdsInput)) {
-            foreach ($lecturerIdsInput as $lid) {
-                if (!empty($lid)) {
-                    $lid = (int)$lid;
-                    if (!in_array($lid, $lecturerIds, true)) {
-                        $lecturerIds[] = $lid;
-                    }
-                }
-            }
-        }
-        if (!empty($lecturerIds)) {
-            $rows = [];
-            foreach ($lecturerIds as $lid) {
-                $rows[] = ['lecturer_id' => $lid, 'article_id' => $article->id];
-            }
-            LecturerArticle::insert($rows);
+        $lecturerIds = collect($request->input('lecturer_ids', []))
+            ->filter(fn($x) => !empty($x))
+            ->map(fn($x) => (int)$x)
+            ->unique()
+            ->values();
+
+        if ($lecturerIds->isNotEmpty()) {
+            $pairs = $lecturerIds->map(fn($lid) => [
+                'lecturer_id' => $lid,
+                'article_id'  => $article->id
+            ])->toArray();
+
+            LecturerArticle::insert($pairs);
         }
 
-        // ------- Sinkron Penulis Mahasiswa -------
+        // -------- Update Penulis Mahasiswa --------
         StudentArticle::where('article_id', $article->id)->delete();
 
-        // Tampilkan mahasiswa HANYA jika kategori 'mahasiswa' (sesuai aturan UI)
-        if ($request->category === 'mahasiswa') {
-            $studentNames = $request->input('student_names', []);
-            $studentNims  = $request->input('student_nims', []);
-            $rows = max(
-                is_array($studentNames) ? count($studentNames) : 0,
-                is_array($studentNims)  ? count($studentNims)  : 0
-            );
+        $studentNames = $request->input('student_names', []);
+        $studentNims  = $request->input('student_nims', []);
+        $rows = max(count($studentNames), count($studentNims));
 
-            for ($i = 0; $i < $rows; $i++) {
-                $name = '';
-                $nim  = '';
-                if (is_array($studentNames) && array_key_exists($i, $studentNames)) {
-                    $name = trim($studentNames[$i]);
-                }
-                if (is_array($studentNims) && array_key_exists($i, $studentNims)) {
-                    $nim = trim($studentNims[$i]);
-                }
-                if ($name === '' && $nim === '') {
-                    continue; // skip baris kosong
-                }
+        for ($i = 0; $i < $rows; $i++) {
+            $name = trim($studentNames[$i] ?? '');
+            $nim  = trim($studentNims[$i] ?? '');
 
-                // Cari/buat student di departemen ini
-                $student = null;
-                if ($nim !== '') {
-                    $student = Student::where('nim', $nim)
-                        ->where('department_id', $departmentId)
-                        ->first();
-                }
-                if (!$student) {
-                    $student = Student::create([
-                        'nim'           => $nim,
-                        'name'          => $name !== '' ? $name : $nim,
-                        'photo'         => null,
-                        'department_id' => $departmentId,
-                    ]);
-                } else {
-                    if ($name !== '') {
+            if ($name === '' && $nim === '') continue;
+
+            $student = null;
+            if ($nim !== '') {
+                $student = Student::where('nim', $nim)->first();
+            }
+
+            if (!$student) {
+                $student = Student::create([
+                    'nim'           => $nim,
+                    'name'          => $name !== '' ? $name : $nim,
+                    'photo'         => null,
+                    'department_id' => $article->department_id,
+                ]);
+            } else {
+                if ($name !== '' && $student->name !== $name) {
+                    if (empty($student->name) || strlen($student->name) < strlen($name)) {
                         $student->name = $name;
                         $student->save();
                     }
                 }
-
-                StudentArticle::create([
-                    'student_id' => $student->id,
-                    'article_id' => $article->id,
-                ]);
             }
+
+            StudentArticle::create([
+                'student_id' => $student->id,
+                'article_id' => $article->id,
+            ]);
         }
 
-        return redirect()->route('article')->with('status','Artikel berhasil diperbarui');
+        return redirect()->route('article')->with('status', 'Artikel berhasil diperbarui');
     }
 
     // Hapus artikel

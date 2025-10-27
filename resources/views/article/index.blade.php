@@ -101,6 +101,12 @@
                         {{date('d-m-Y', strtotime($data_article->date))}}
                       </td>
                     </tr>
+                    <tr>
+                      <td class="pl-0 opacity-5">DOI</td>
+                      <td>
+                        {{$data_article->doi}}
+                      </td>
+                    </tr>
                   </tbody>
                 </table>
               </div>

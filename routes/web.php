@@ -92,16 +92,13 @@ Route::group(['middleware' => ['auth']], function() {
     Route::get('/article/view/{id}',[ArticleController::class,'show'],function($id){})->name('view');
     Route::get('/article/download/{file}',[ArticleController::class,'download'],function($id){})->name('download');
     Route::get('/article/edit/{id}',[ArticleController::class,'edit'],function($id){})->name('edit_article');
-    Route::post('/article/update/{id}',[ArticleController::class,'update'],function($id){})->name('update_article');
+    Route::put('/article/update/{id}',[ArticleController::class,'update'],function($id){})->name('update_article');
     Route::delete('/deleteArticle/{id}',[ArticleController::class, 'destroy'],function($id){})->name('delete_article');
 
     Route::get('/stats/articles/{category}/{bucket}/{type}', [ArticleStatsController::class, 'bucket'])
     ->where([
-        // hanya izinkan 3 nilai ini
-        'category' => '^(dosen|mahasiswa|mix)$',
-        // bucket TS / TS-1 / TS-2
+        'category' => '^(dosen|mahasiswa)$',
         'bucket'   => '^(TS|TS\-1|TS\-2)$',
-        // jenis publikasi: biarkan apa saja (ada spasi, dll) sampai '/'
         'type'     => '.+',
     ])
     ->name('stats.articles.bucket');
@@ -139,5 +136,20 @@ Route::group(['middleware' => ['auth']], function() {
     Route::post('/ia/add/send',[IaController::class,'store'])->name('ias.store');
     Route::put('/ia/update/{id}',[IaController::class,'update'],function($id){})->name('ias.update');
     Route::delete('/ia/delete/{id}',[IaController::class, 'destroy'],function($id){})->name('ias.destroy');
+    
+    // Parent (Bidang Keilmuan)
+    Route::get('/expertises', [\App\Http\Controllers\ExpertiseController::class, 'index'])->name('expertises.index');
+    Route::post('/expertises', [\App\Http\Controllers\ExpertiseController::class, 'store'])->name('expertises.store');
+    Route::put('/expertises/{id}', [\App\Http\Controllers\ExpertiseController::class, 'update'])->name('expertises.update');
+    Route::delete('/expertises/{id}', [\App\Http\Controllers\ExpertiseController::class, 'destroy'])->name('expertises.destroy');
+
+    // Sub (Sub Bidang) – halaman terpisah per parent
+    Route::get('/expertises/{expertise}/fields', [\App\Http\Controllers\ExpertiseFieldController::class, 'index'])->name('expertise-fields.index');
+    Route::post('/expertise-fields', [\App\Http\Controllers\ExpertiseFieldController::class, 'store'])->name('expertise-fields.store');
+    Route::put('/expertise-fields/{id}', [\App\Http\Controllers\ExpertiseFieldController::class, 'update'])->name('expertise-fields.update');
+    Route::delete('/expertise-fields/{id}', [\App\Http\Controllers\ExpertiseFieldController::class, 'destroy'])->name('expertise-fields.destroy');
+
+    // JSON untuk dropdown sub-bidang
+    Route::get('/expertises/{id}/fields-json', [\App\Http\Controllers\ExpertiseController::class, 'fieldsJson'])->name('expertises.fields-json');
 
 });

@@ -105,7 +105,7 @@
                 <div class="form-row">
                   <div class="col-md-6">
                     <div class="form-group input-group-sm">
-                      <label for="date">Periode (tgl terbit) <span class="text-danger">*</span></label>
+                      <label for="date">Periode (tanggal terbit) <span class="text-danger">*</span></label>
                       <div class="bootstrap-iso">
                         <div class="input-group date">
                           <div class="input-group-addon">

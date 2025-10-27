@@ -9,11 +9,19 @@ class Lecturer extends Model
 {
     use HasFactory;
 
-    protected $fillable = ['user_id', 'department_id'];
+    protected $fillable = [
+        'user_id','department_id','nik','nidn','birth_place','birth_date','address',
+        'position','marital_status','expertise_field_id',
+    ];
 
     public function department()
     {
         return $this->belongsTo(Department::class);
+    }
+
+    public function expertiseField()
+    {
+        return $this->belongsTo(ExpertiseField::class);
     }
 
     public function user()

@@ -10,7 +10,7 @@ class Article extends Model
     use HasFactory;
 
     protected $fillable = [
-        'department_id', 'title', 'type_journal', 'url', 'publisher', 'date', 'category', 'volume', 'number', 'file'
+        'department_id', 'title', 'type_journal', 'url', 'doi', 'publisher', 'date', 'category', 'volume', 'number', 'file'
     ];
 
     public function department()

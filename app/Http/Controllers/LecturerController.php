@@ -2,9 +2,11 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\Lecturer;
 use App\Models\User;
+use App\Models\Lecturer;
 use App\Models\DepartmentHead;
+use App\Models\Expertise;
+use App\Models\ExpertiseField;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
@@ -13,7 +15,7 @@ use Illuminate\Validation\Rule;
 class LecturerController extends Controller
 {
     /**
-     * List dosen di prodi Kaprodi yang login.
+     * Daftar dosen milik prodi Kaprodi yang login.
      */
     public function index()
     {
@@ -27,19 +29,28 @@ class LecturerController extends Controller
             abort(403, 'Akun Kaprodi belum terhubung ke Program Studi.');
         }
 
-        // Urutkan nama dosen via join ke users (hindari N+1 dengan with('user'))
-        $lecturers = Lecturer::where('department_id', $deptId)
+        // Urut nama berdasar users.name, eager load untuk hindari N+1
+        $lecturers = Lecturer::query()
+            ->where('lecturers.department_id', $deptId)
             ->join('users', 'users.id', '=', 'lecturers.user_id')
             ->orderBy('users.name')
             ->select('lecturers.*')
-            ->with('user')
+            ->with([
+                'user:id,name,email',
+                'expertiseField:id,expertise_id,name',
+                'expertiseField.expertise:id,name',
+            ])
             ->paginate(10);
 
-        return view('lecturers.index', compact('lecturers', 'user'));
+        $positions = ['Asisten Ahli','Lektor','Lektor Kepala','Profesor'];
+        $maritals  = ['Menikah','Belum Menikah'];
+        $expertises = Expertise::orderBy('name')->get(['id','name']);
+
+        return view('lecturers.index', compact('lecturers', 'user', 'positions', 'maritals', 'expertises'));
     }
 
     /**
-     * Tambah dosen baru ke prodi Kaprodi.
+     * Simpan dosen baru di prodi Kaprodi (1 dosen 1 sub-bidang).
      */
     public function store(Request $request)
     {
@@ -53,32 +64,51 @@ class LecturerController extends Controller
             return back()->withErrors(['general' => 'Akun Kaprodi belum terhubung ke Program Studi.'])->withInput();
         }
 
+        // Validasi akun user + profil dosen
         $request->validate([
+            // user
             'name'                  => ['required','string','max:255'],
             'email'                 => ['required','email','max:255','unique:users,email'],
-            'password'              => ['required','string','min:6','confirmed'], // butuh password_confirmation
+            'password'              => ['required','string','min:6','confirmed'],
+
+            // profil dosen (lecturers)
+            'nik'                   => ['nullable','string','max:32','unique:lecturers,nik'],
+            'nidn'                  => ['nullable','string','max:32','unique:lecturers,nidn'],
+            'birth_place'           => ['nullable','string','max:255'],
+            'birth_date'            => ['nullable','date'],
+            'address'               => ['nullable','string'],
+            'position'              => ['nullable', Rule::in(['Asisten Ahli','Lektor','Lektor Kepala','Profesor'])],
+            'marital_status'        => ['nullable', Rule::in(['Menikah','Belum Menikah'])],
+            'expertise_field_id'    => ['nullable','exists:expertise_fields,id'], // satu dosen satu sub-bidang
         ]);
 
-        // Buat akun user (role lecturer)
-        $newUser = new User();
-        $newUser->name     = $request->name;
-        $newUser->email    = $request->email;
-        $newUser->role     = 'lecturer';
-        $newUser->password = Hash::make($request->password);
-        $newUser->save();
+        // Buat user
+        $user = new User();
+        $user->name     = $request->name;
+        $user->email    = $request->email;
+        $user->role     = 'lecturer';
+        $user->password = Hash::make($request->password);
+        $user->save();
 
-        // Buat profil lecturer pada prodi Kaprodi (dept terkunci)
+        // Buat lecturer
         Lecturer::create([
-            'user_id'       => $newUser->id,
-            'department_id' => $deptId,
+            'user_id'            => $user->id,
+            'department_id'      => $deptId,
+            'nik'                => $request->nik,
+            'nidn'               => $request->nidn,
+            'birth_place'        => $request->birth_place,
+            'birth_date'         => $request->birth_date,
+            'address'            => $request->address,
+            'position'           => $request->position,
+            'marital_status'     => $request->marital_status,
+            'expertise_field_id' => $request->expertise_field_id,
         ]);
 
-        return redirect()->route('lecturers.index')->with('success', 'Dosen berhasil ditambahkan ke Program Studi Anda.');
+        return redirect()->route('lecturers.index')->with('success', 'Dosen berhasil ditambahkan.');
     }
 
     /**
-     * Edit data dosen (nama/email/password). Prodi tidak dapat diubah oleh Kaprodi.
-     * $id mengacu pada lecturer.id
+     * Update dosen (akun + profil) milik prodi Kaprodi.
      */
     public function update(Request $request, $id)
     {
@@ -93,32 +123,53 @@ class LecturerController extends Controller
         }
 
         $lecturer = Lecturer::with('user')
-            ->where('id', $id)
-            ->where('department_id', $deptId) // pastikan milik prodi Kaprodi
+            ->where('id',$id)
+            ->where('department_id',$deptId)
             ->firstOrFail();
 
+        // Validasi
         $request->validate([
             'name'                  => ['required','string','max:255'],
             'email'                 => ['required','email','max:255', Rule::unique('users','email')->ignore($lecturer->user_id)],
-            'password'              => ['nullable','string','min:6','confirmed'], // jika diisi, harus sama dg konfirmasi
+            'password'              => ['nullable','string','min:6','confirmed'],
+
+            'nik'                   => ['nullable','string','max:32', Rule::unique('lecturers','nik')->ignore($lecturer->id)],
+            'nidn'                  => ['nullable','string','max:32', Rule::unique('lecturers','nidn')->ignore($lecturer->id)],
+            'birth_place'           => ['nullable','string','max:255'],
+            'birth_date'            => ['nullable','date'],
+            'address'               => ['nullable','string'],
+            'position'              => ['nullable', Rule::in(['Asisten Ahli','Lektor','Lektor Kepala','Profesor'])],
+            'marital_status'        => ['nullable', Rule::in(['Menikah','Belum Menikah'])],
+            'expertise_field_id'    => ['nullable','exists:expertise_fields,id'],
         ]);
 
         // Update akun user
         $u = $lecturer->user;
         $u->name  = $request->name;
         $u->email = $request->email;
-        // pastikan role tetap lecturer
-        $u->role  = 'lecturer';
+        $u->role  = 'lecturer'; // pastikan tetap lecturer
         if ($request->filled('password')) {
             $u->password = Hash::make($request->password);
         }
         $u->save();
 
+        // Update profil lecturer
+        $lecturer->update([
+            'nik'                => $request->nik,
+            'nidn'               => $request->nidn,
+            'birth_place'        => $request->birth_place,
+            'birth_date'         => $request->birth_date,
+            'address'            => $request->address,
+            'position'           => $request->position,
+            'marital_status'     => $request->marital_status,
+            'expertise_field_id' => $request->expertise_field_id,
+        ]);
+
         return redirect()->route('lecturers.index')->with('success', 'Data dosen berhasil diperbarui.');
     }
 
     /**
-     * Hapus dosen (profil + akun user).
+     * Hapus dosen (profil + user) milik prodi Kaprodi.
      */
     public function destroy($id)
     {
@@ -133,15 +184,17 @@ class LecturerController extends Controller
         }
 
         $lecturer = Lecturer::with('user')
-            ->where('id', $id)
-            ->where('department_id', $deptId)
+            ->where('id',$id)
+            ->where('department_id',$deptId)
             ->firstOrFail();
 
         // Hapus profil lecturer
         $lecturer->delete();
 
-        // (Kebijakan) Hapus akun user juga
-        $lecturer->user->delete();
+        // Kebijakan: hapus akun user juga
+        if ($lecturer->user) {
+            $lecturer->user->delete();
+        }
 
         return redirect()->route('lecturers.index')->with('success', 'Dosen berhasil dihapus.');
     }

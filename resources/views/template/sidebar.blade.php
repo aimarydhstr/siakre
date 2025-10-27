@@ -16,6 +16,11 @@
     </a>
 
     @if(Auth::user()->role == 'admin')
+      <a href="{{ route('expertises.index') }}"
+         class="list-group-item list-group-item-action {{ request()->routeIs('expertises.*') ? 'active' : '' }}">
+        <i class="fas fa-folder"></i> Bidang Keahlian
+      </a>
+
       <a href="{{ route('faculties.index') }}"
          class="list-group-item list-group-item-action {{ request()->routeIs('faculties.*') ? 'active' : '' }}">
         <i class="fas fa-folder"></i> Fakultas
