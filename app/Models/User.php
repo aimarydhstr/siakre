@@ -47,8 +47,8 @@ class User extends Authenticatable
         return $this->hasOne(DepartmentHead::class);
     }
 
-    public function lecturer()
+    public function faculty_head()
     {
-        return $this->hasOne(Lecturer::class);
+        return $this->hasOne(FacultyHead::class);
     }
 }

@@ -41,6 +41,9 @@ Route::group(['middleware' => ['auth']], function() {
     Route::get('/select-prestasi',[DataController::class, 'select'])->name('select-prestasi');
     Route::post('/select/send',[DataController::class, 'selectPost'])->name('select-send');
 
+    Route::get ('/achievements/import', [DataController::class, 'importForm'])->name('achievements.import.form');
+    Route::post('/achievements/import', [DataController::class, 'importStore'])->name('achievements.import.store');
+
     Route::get('/akademik',[DataController::class, 'akademik'])->name('akademik');
     Route::get('/akademik/region/{year}',[DataController::class, 'akademik_region'],function($year){})->name('akademik-region');
     Route::get('/akademik/national/{year}',[DataController::class, 'akademik_national'],function($year){})->name('akademik-national');
@@ -94,14 +97,27 @@ Route::group(['middleware' => ['auth']], function() {
     Route::get('/article/edit/{id}',[ArticleController::class,'edit'],function($id){})->name('edit_article');
     Route::put('/article/update/{id}',[ArticleController::class,'update'],function($id){})->name('update_article');
     Route::delete('/deleteArticle/{id}',[ArticleController::class, 'destroy'],function($id){})->name('delete_article');
+    // Import Excel
+    Route::get('/article/import', [ArticleController::class,'importForm'])->name('article.import.form');
+    Route::post('/article/import', [ArticleController::class,'importStore'])->name('article.import.store');
 
-    Route::get('/stats/articles/{category}/{bucket}/{type}', [ArticleStatsController::class, 'bucket'])
+
+    Route::get(
+        '/stats/articles/{category}/{bucket}/{type}',
+        [ArticleStatsController::class, 'bucket']
+    )
     ->where([
-        'category' => '^(dosen|mahasiswa)$',
-        'bucket'   => '^(TS|TS\-1|TS\-2)$',
-        'type'     => '.+',
+        'category' => 'dosen|mahasiswa|mix',
+        'bucket'   => 'TS|TS-1|TS-2',
+        // type boleh berisi apa saja, termasuk spasi dan slash -> gunakan regex ".*"
+        'type'     => '.*',
     ])
-    ->name('stats.articles.bucket');
+    ->name('stats.articles.bucket')
+    ->middleware('auth');
+
+    Route::get('/stats/achievements/bucket/{level}/{bucket}', [\App\Http\Controllers\AchievementStatsController::class, 'bucket'])
+    ->name('stats.achievements.bucket')
+    ->middleware('auth');
 
     // ----------------------prodi----------------------
     Route::get('/prodi',[DepartmentController::class,'index'])->name('departments.index');
@@ -120,6 +136,9 @@ Route::group(['middleware' => ['auth']], function() {
     Route::post('/lecturers/add/send',[LecturerController::class,'store'])->name('lecturers.store');
     Route::put('/lecturers/update/{id}',[LecturerController::class,'update'],function($id){})->name('lecturers.update');
     Route::delete('/lecturers/delete/{id}',[LecturerController::class, 'destroy'],function($id){})->name('lecturers.destroy');
+    
+    Route::get ('/lecturers/import', [LecturerController::class, 'importForm'])->name('lecturers.import.form');
+    Route::post('/lecturers/import', [LecturerController::class, 'importStore'])->name('lecturers.import.store');
 
 
     Route::get('/users',[UserController::class,'index'])->name('users.index');
@@ -151,5 +170,32 @@ Route::group(['middleware' => ['auth']], function() {
 
     // JSON untuk dropdown sub-bidang
     Route::get('/expertises/{id}/fields-json', [\App\Http\Controllers\ExpertiseController::class, 'fieldsJson'])->name('expertises.fields-json');
+
+    Route::get('/hkis', [\App\Http\Controllers\HkiController::class, 'index'])->name('hki.index');
+    Route::get('/hkis/create', [\App\Http\Controllers\HkiController::class, 'create'])->name('hki.create');
+    Route::post('/hkis/store', [\App\Http\Controllers\HkiController::class, 'store'])->name('hki.store');
+    Route::get('/hkis/download/{f}', [\App\Http\Controllers\HkiController::class, 'download'])->name('hki.download');
+    Route::get('/hkis/edit/{id}', [\App\Http\Controllers\HkiController::class, 'edit'])->name('hki.edit');
+    Route::put('/hkis/update/{id}', [\App\Http\Controllers\HkiController::class, 'update'])->name('hki.update');
+    Route::delete('/hkis/delete/{id}', [\App\Http\Controllers\HkiController::class, 'destroy'])->name('hki.destroy');
+    // Import Excel
+    Route::get('/hkis/import', [\App\Http\Controllers\HkiController::class,'importForm'])->name('hki.import.form');
+    Route::post('/hkis/import', [\App\Http\Controllers\HkiController::class,'importStore'])->name('hki.import.store');
+    
+    Route::get('/book', [\App\Http\Controllers\BookController::class, 'index'])->name('books.index');
+    Route::get('/book/create', [\App\Http\Controllers\BookController::class, 'create'])->name('books.create');
+    Route::post('/book/store', [\App\Http\Controllers\BookController::class, 'store'])->name('books.store');
+    Route::get('/book/download/{f}', [\App\Http\Controllers\BookController::class, 'download'])->name('books.download');
+    Route::get('/book/edit/{id}', [\App\Http\Controllers\BookController::class, 'edit'])->name('books.edit');
+    Route::put('/book/update/{id}', [\App\Http\Controllers\BookController::class, 'update'])->name('books.update');
+    Route::delete('/book/delete/{id}', [\App\Http\Controllers\BookController::class, 'destroy'])->name('books.destroy');
+    // Import Excel
+    Route::get('/book/import', [\App\Http\Controllers\BookController::class,'importForm'])->name('books.import.form');
+    Route::post('/book/import', [\App\Http\Controllers\BookController::class,'importStore'])->name('books.import.store');
+
+
+    Route::get('/output', [\App\Http\Controllers\OutputController::class, 'index'])->name('output.index');
+    Route::post('/output/find', [\App\Http\Controllers\OutputController::class, 'find'])->name('output.find');
+    Route::get('/output/{lecturer}', [\App\Http\Controllers\OutputController::class, 'show'])->name('output.show');
 
 });

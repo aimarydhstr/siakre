@@ -21,4 +21,16 @@ class Student extends Model
         return $this->belongsToMany(Achievement::class, 'student_achievements')
             ->withPivot('certificate');
     }
+
+    public function hkis()
+    {
+        return $this->belongsToMany(Hki::class, 'hki_students', 'student_id', 'hki_id')
+                    ->withTimestamps();
+    }
+
+    public function books()
+    {
+        return $this->belongsToMany(Book::class, 'book_students', 'student_id', 'book_id')
+                    ->withTimestamps();
+    }
 }

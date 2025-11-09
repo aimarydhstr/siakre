@@ -53,7 +53,10 @@
           <h4 class="font-weight-bold mb-0">
             Prestasi Akademik
           </h4>
-          <a href="{{route('export-akademik')}}" class="btn btn-outline-primary my-3 my-md-0"><i class="fas fa-download mr-1"></i> Unduh Excel</a>
+          <div>
+            <a href="{{route('achievements.import.form')}}" class="btn btn-outline-success my-3 my-md-0"><i class="fas fa-upload mr-1"></i> Import Data</a>
+            <a href="{{route('export-akademik')}}" class="btn btn-outline-primary my-3 my-md-0"><i class="fas fa-download mr-1"></i> Unduh Excel</a>
+          </div>
         </div>
 
         <div class="card rounded shadow mt-3 mb-5">

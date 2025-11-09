@@ -10,7 +10,7 @@ class Lecturer extends Model
     use HasFactory;
 
     protected $fillable = [
-        'user_id','department_id','nik','nidn','birth_place','birth_date','address',
+        'name', 'department_id','nik','nidn','birth_place','birth_date','address',
         'position','marital_status','expertise_field_id',
     ];
 
@@ -24,13 +24,20 @@ class Lecturer extends Model
         return $this->belongsTo(ExpertiseField::class);
     }
 
-    public function user()
-    {
-        return $this->belongsTo(User::class);
-    }
-
     public function articles()
     {
         return $this->belongsToMany(Article::class, 'lecturer_articles');
+    }
+    
+    public function hkis()
+    {
+        return $this->belongsToMany(Hki::class, 'hki_lecturers', 'lecturer_id', 'hki_id')
+                    ->withTimestamps();
+    }
+
+    public function books()
+    {
+        return $this->belongsToMany(Book::class, 'book_lecturers', 'lecturer_id', 'book_id')
+                    ->withTimestamps();
     }
 }

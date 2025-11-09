@@ -41,12 +41,18 @@
         <i class="fas fa-folder"></i> Kerja Sama
       </a>
 
-    @elseif(Auth::user()->role == 'department_head')
-      <a href="{{ route('lecturers.index') }}"
-         class="list-group-item list-group-item-action {{ request()->routeIs('lecturers.*') ? 'active' : '' }}">
-        <i class="fas fa-user"></i> Dosen
-      </a>
-    @endif
+  @endif
+
+  
+    <a href="{{ route('lecturers.index') }}"
+      class="list-group-item list-group-item-action {{ request()->routeIs('lecturers.*') ? 'active' : '' }}">
+      <i class="fas fa-user"></i> Dosen
+    </a>
+
+    <a href="{{ route('output.index') }}"
+        class="list-group-item list-group-item-action {{ (request()->routeIs('output') || request()->routeIs('output.*')) ? 'active' : '' }}">
+      <i class="fas fa-folder-open"></i> Luaran Dosen
+    </a>
 
     <a href="#pageSubmenu1"
        data-toggle="collapse"
@@ -60,6 +66,16 @@
       <a class="dropdown-item sidebar-dropdown {{ request()->routeIs('nonAkademik') ? 'active' : '' }}"
          href="{{ route('nonAkademik') }}">Non-Akademik</a>
     </div>
+
+    <a href="{{ route('hki.index') }}"
+       class="list-group-item list-group-item-action {{ (request()->routeIs('hki') || request()->routeIs('hki.*')) ? 'active' : '' }}">
+      <i class="fas fa-book"></i> HKI
+    </a>
+
+    <a href="{{ route('books.index') }}"
+       class="list-group-item list-group-item-action {{ (request()->routeIs('books') || request()->routeIs('books.*')) ? 'active' : '' }}">
+      <i class="fas fa-book"></i> Buku
+    </a>
 
     <a href="{{ route('article') }}"
        class="list-group-item list-group-item-action {{ (request()->routeIs('article') || request()->routeIs('article.*')) ? 'active' : '' }}">

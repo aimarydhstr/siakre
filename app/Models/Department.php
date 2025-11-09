@@ -39,4 +39,12 @@ class Department extends Model
     {
         return $this->belongsTo(Faculty::class);
     }
+    public function books()
+    {
+        return $this->hasMany(Book::class);
+    }
+    public function hki()
+    {
+        return $this->hasMany(Hki::class);
+    }
 }

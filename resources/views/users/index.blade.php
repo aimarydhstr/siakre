@@ -45,80 +45,79 @@
                   <th>Email</th>
                   <th>Role</th>
                   <th>Prodi</th>
+                  <th>Fakultas</th>
                   <th style="width:160px;">Aksi</th>
                 </tr>
               </thead>
               <tbody>
-                @forelse($users as $i => $user)
+                @forelse($users as $i => $row)
                   @php
-                    $deptName = '-';
-                    if ($user->role !== 'admin') {
-                      $deptName = optional(optional($user->department_head)->department)->name
-                                  ?? optional(optional($user->lecturer)->department)->name
-                                  ?? '-';
-                    }
+                    $deptName = optional(optional($row->department_head)->department)->name ?? '-';
+                    $facName  = optional(optional($row->faculty_head)->faculty)->name;
+                    $faculty = optional(optional($row->department_head)->department)->faculty->name ?? '-';
                   @endphp
                   <tr>
                     <td>{{ ($users->currentPage()-1)*$users->perPage() + $i + 1 }}</td>
-                    <td class="text-break">{{ $user->name }}</td>
-                    <td class="text-break">{{ $user->email }}</td>
-                    <td class="text-capitalize">{{ str_replace('_',' ',$user->role) }}</td>
+                    <td class="text-break">{{ $row->name }}</td>
+                    <td class="text-break">{{ $row->email }}</td>
+                    <td class="text-capitalize">{{ str_replace('_',' ',$row->role) }}</td>
                     <td class="text-break">{{ $deptName }}</td>
+                    <td class="text-break">{{ $facName ? $facName : $faculty }}</td>
                     <td>
-                      <button class="btn btn-warning btn-sm" data-toggle="modal" data-target="#modal-edit-user-{{ $user->id }}">
+                      <button class="btn btn-warning btn-sm" data-toggle="modal" data-target="#modal-edit-user-{{ $row->id }}">
                         <i class="fa fa-edit"></i>
                       </button>
-                      <button class="btn btn-danger btn-sm" data-toggle="modal" data-target="#modal-delete-user-{{ $user->id }}">
+                      <button class="btn btn-danger btn-sm" data-toggle="modal" data-target="#modal-delete-user-{{ $row->id }}">
                         <i class="fa fa-trash"></i>
                       </button>
                     </td>
                   </tr>
 
                   {{-- Modal Edit (unik per baris) --}}
-                  <div class="modal fade" id="modal-edit-user-{{ $user->id }}" tabindex="-1" role="dialog" aria-labelledby="label-edit-user-{{ $user->id }}" aria-hidden="true">
+                  <div class="modal fade" id="modal-edit-user-{{ $row->id }}" tabindex="-1" role="dialog" aria-labelledby="label-edit-user-{{ $row->id }}" aria-hidden="true">
                     <div class="modal-dialog" role="document">
                       <div class="modal-content">
-                        <form action="{{ route('users.update', $user->id) }}" method="POST">
+                        <form action="{{ route('users.update', $row->id) }}" method="POST">
                           @csrf
                           @method('PUT')
-                          <input type="hidden" name="_from" value="edit-{{ $user->id }}">
+                          <input type="hidden" name="_from" value="edit-{{ $row->id }}">
                           <div class="modal-header">
-                            <h5 class="modal-title" id="label-edit-user-{{ $user->id }}">Edit Pengguna</h5>
+                            <h5 class="modal-title" id="label-edit-user-{{ $row->id }}">Edit Pengguna</h5>
                             <button type="button" class="close" data-dismiss="modal" aria-label="Close">
                               <span aria-hidden="true">&times;</span>
                             </button>
                           </div>
                           <div class="modal-body">
                             <div class="form-group">
-                              <label for="name-edit-{{ $user->id }}">Nama <span class="text-danger">*</span></label>
+                              <label for="name-edit-{{ $row->id }}">Nama <span class="text-danger">*</span></label>
                               <input type="text"
-                                     id="name-edit-{{ $user->id }}"
+                                     id="name-edit-{{ $row->id }}"
                                      name="name"
                                      class="form-control @error('name') is-invalid @enderror"
-                                     value="{{ old('name', $user->name) }}"
+                                     value="{{ old('name', $row->name) }}"
                                      required autocomplete="off">
                               @error('name') <div class="invalid-feedback">{{ $message }}</div> @enderror
                             </div>
 
                             <div class="form-group">
-                              <label for="email-edit-{{ $user->id }}">Email <span class="text-danger">*</span></label>
+                              <label for="email-edit-{{ $row->id }}">Email <span class="text-danger">*</span></label>
                               <input type="email"
-                                     id="email-edit-{{ $user->id }}"
+                                     id="email-edit-{{ $row->id }}"
                                      name="email"
                                      class="form-control @error('email') is-invalid @enderror"
-                                     value="{{ old('email', $user->email) }}"
+                                     value="{{ old('email', $row->email) }}"
                                      required autocomplete="off">
                               @error('email') <div class="invalid-feedback">{{ $message }}</div> @enderror
                             </div>
 
                             <div class="form-group">
-                              <label for="role-edit-{{ $user->id }}">Role <span class="text-danger">*</span></label>
-                              <select id="role-edit-{{ $user->id }}"
+                              <label for="role-edit-{{ $row->id }}">Role <span class="text-danger">*</span></label>
+                              <select id="role-edit-{{ $row->id }}"
                                       name="role"
                                       class="form-control custom-select @error('role') is-invalid @enderror"
                                       required>
                                 @foreach($roles as $r)
-                                  <option value="{{ $r }}" {{ (string)old('role', $user->role) === (string)$r ? 'selected' : '' }}>
+                                  <option value="{{ $r }}" {{ (string)old('role', $row->role) === (string)$r ? 'selected' : '' }}>
                                     {{ ucfirst(str_replace('_',' ', $r)) }}
                                   </option>
                                 @endforeach
@@ -126,20 +125,18 @@
                               @error('role') <div class="invalid-feedback">{{ $message }}</div> @enderror
                             </div>
 
-                            <div class="form-group" id="wrap-dept-edit-{{ $user->id }}">
-                              <label for="department-id-edit-{{ $user->id }}">Program Studi <span class="text-danger">*</span></label>
-                              <select id="department-id-edit-{{ $user->id }}"
+                            {{-- Prodi (untuk department_head) --}}
+                            @php
+                              $currentDeptId = old('department_id', optional($row->department_head)->department_id ?? '');
+                            @endphp
+                            <div class="form-group" id="wrap-dept-edit-{{ $row->id }}">
+                              <label for="department-id-edit-{{ $row->id }}">Program Studi <span class="text-danger">*</span></label>
+                              <select id="department-id-edit-{{ $row->id }}"
                                       name="department_id"
                                       class="form-control custom-select @error('department_id') is-invalid @enderror">
-                                <option value="" disabled {{ old('department_id', ($user->departmentHead->department_id ?? $user->lecturer->department_id ?? '')) === '' ? 'selected' : '' }}>Pilih Prodi</option>
+                                <option value="" disabled {{ $currentDeptId === '' ? 'selected' : '' }}>Pilih Prodi</option>
                                 @foreach($departments as $dept)
-                                  <option value="{{ $dept->id }}"
-                                    @php
-                                      $currentDept = old('department_id',
-                                        $user->departmentHead->department_id ?? $user->lecturer->department_id ?? ''
-                                      );
-                                    @endphp
-                                    {{ (string)$currentDept === (string)$dept->id ? 'selected' : '' }}>
+                                  <option value="{{ $dept->id }}" {{ (string)$currentDeptId === (string)$dept->id ? 'selected' : '' }}>
                                     {{ $dept->name }}
                                   </option>
                                 @endforeach
@@ -147,10 +144,29 @@
                               @error('department_id') <div class="invalid-feedback">{{ $message }}</div> @enderror
                             </div>
 
+                            {{-- Fakultas (untuk faculty_head) --}}
+                            @php
+                              $currentFacId = old('faculty_id', optional($row->faculty_head)->faculty_id ?? '');
+                            @endphp
+                            <div class="form-group" id="wrap-fac-edit-{{ $row->id }}">
+                              <label for="faculty-id-edit-{{ $row->id }}">Fakultas <span class="text-danger">*</span></label>
+                              <select id="faculty-id-edit-{{ $row->id }}"
+                                      name="faculty_id"
+                                      class="form-control custom-select @error('faculty_id') is-invalid @enderror">
+                                <option value="" disabled {{ $currentFacId === '' ? 'selected' : '' }}>Pilih Fakultas</option>
+                                @foreach(($faculties ?? []) as $fac)
+                                  <option value="{{ $fac->id }}" {{ (string)$currentFacId === (string)$fac->id ? 'selected' : '' }}>
+                                    {{ $fac->name }}
+                                  </option>
+                                @endforeach
+                              </select>
+                              @error('faculty_id') <div class="invalid-feedback">{{ $message }}</div> @enderror
+                            </div>
+
                             <div class="form-group">
-                              <label for="password-edit-{{ $user->id }}">Password (opsional)</label>
+                              <label for="password-edit-{{ $row->id }}">Password (opsional)</label>
                               <input type="password"
-                                     id="password-edit-{{ $user->id }}"
+                                     id="password-edit-{{ $row->id }}"
                                      name="password"
                                      class="form-control @error('password') is-invalid @enderror"
                                      autocomplete="new-password"
@@ -158,11 +174,10 @@
                               @error('password') <div class="invalid-feedback">{{ $message }}</div> @enderror
                             </div>
 
-                            {{-- Ulangi Password (opsional) --}}
                             <div class="form-group">
-                              <label for="password-confirm-edit-{{ $user->id }}">Ulangi Password (opsional)</label>
+                              <label for="password-confirm-edit-{{ $row->id }}">Ulangi Password (opsional)</label>
                               <input type="password"
-                                     id="password-confirm-edit-{{ $user->id }}"
+                                     id="password-confirm-edit-{{ $row->id }}"
                                      name="password_confirmation"
                                      class="form-control @error('password_confirmation') is-invalid @enderror"
                                      autocomplete="new-password"
@@ -181,20 +196,20 @@
                   </div>
 
                   {{-- Modal Delete (unik per baris) --}}
-                  <div class="modal fade" id="modal-delete-user-{{ $user->id }}" tabindex="-1" role="dialog" aria-labelledby="label-delete-user-{{ $user->id }}" aria-hidden="true">
+                  <div class="modal fade" id="modal-delete-user-{{ $row->id }}" tabindex="-1" role="dialog" aria-labelledby="label-delete-user-{{ $row->id }}" aria-hidden="true">
                     <div class="modal-dialog modal-dialog-centered" role="document">
                       <div class="modal-content">
-                        <form action="{{ route('users.destroy', $user->id) }}" method="POST">
+                        <form action="{{ route('users.destroy', $row->id) }}" method="POST">
                           @csrf
                           @method('DELETE')
                           <div class="modal-header">
-                            <h5 class="modal-title text-danger" id="label-delete-user-{{ $user->id }}">Hapus Pengguna</h5>
+                            <h5 class="modal-title text-danger" id="label-delete-user-{{ $row->id }}">Hapus Pengguna</h5>
                             <button type="button" class="close" data-dismiss="modal" aria-label="Close">
                               <span aria-hidden="true">&times;</span>
                             </button>
                           </div>
                           <div class="modal-body">
-                            <p class="mb-0">Yakin ingin menghapus <strong>{{ $user->name }}</strong>? Tindakan ini tidak dapat dibatalkan.</p>
+                            <p class="mb-0">Yakin ingin menghapus <strong>{{ $row->name }}</strong>? Tindakan ini tidak dapat dibatalkan.</p>
                           </div>
                           <div class="modal-footer">
                             <button type="button" class="btn btn-outline-secondary" data-dismiss="modal">Batal</button>
@@ -207,7 +222,7 @@
 
                 @empty
                   <tr>
-                    <td colspan="6" class="text-center">Belum ada data.</td>
+                    <td colspan="7" class="text-center">Belum ada data.</td>
                   </tr>
                 @endforelse
               </tbody>
@@ -284,6 +299,7 @@
             @error('role') <div class="invalid-feedback">{{ $message }}</div> @enderror
           </div>
 
+          {{-- Prodi (khusus department_head) --}}
           <div class="form-group" id="wrap-dept-add">
             <label for="department-id-add">Program Studi <span class="text-danger">*</span></label>
             <select id="department-id-add"
@@ -299,6 +315,22 @@
             @error('department_id') <div class="invalid-feedback">{{ $message }}</div> @enderror
           </div>
 
+          {{-- Fakultas (khusus faculty_head) --}}
+          <div class="form-group" id="wrap-fac-add">
+            <label for="faculty-id-add">Fakultas <span class="text-danger">*</span></label>
+            <select id="faculty-id-add"
+                    name="faculty_id"
+                    class="form-control custom-select @error('faculty_id') is-invalid @enderror">
+              <option value="" disabled {{ old('faculty_id') ? '' : 'selected' }}>Pilih Fakultas</option>
+              @foreach(($faculties ?? []) as $fac)
+                <option value="{{ $fac->id }}" {{ (string)old('faculty_id') === (string)$fac->id ? 'selected' : '' }}>
+                  {{ $fac->name }}
+                </option>
+              @endforeach
+            </select>
+            @error('faculty_id') <div class="invalid-feedback">{{ $message }}</div> @enderror
+          </div>
+
           <div class="form-group">
             <label for="password-add">Password <span class="text-danger">*</span></label>
             <input type="password"
@@ -310,7 +342,6 @@
             @error('password') <div class="invalid-feedback">{{ $message }}</div> @enderror
           </div>
 
-          {{-- Ulangi Password --}}
           <div class="form-group">
             <label for="password-confirm-add">Ulangi Password <span class="text-danger">*</span></label>
             <input type="password"
@@ -335,21 +366,34 @@
 
 @section('js')
 <script>
-  // Helper: tampil/sembunyikan select Prodi berdasarkan role
-  function bindRoleToggle(roleId, deptId, wrapperId) {
+  /**
+   * Tampilkan/sembunyikan select Prodi/Fakultas berdasarkan role.
+   * - department_head => tampilkan Prodi, sembunyikan Fakultas
+   * - faculty_head    => tampilkan Fakultas, sembunyikan Prodi
+   * - admin           => sembunyikan keduanya
+   */
+  function bindRoleToggles(roleId, deptWrapId, deptSelId, facWrapId, facSelId) {
     const roleEl = document.getElementById(roleId);
-    const deptEl = document.getElementById(deptId);
-    const wrapEl = document.getElementById(wrapperId);
-    if (!roleEl || !deptEl || !wrapEl) return;
+    const deptWrap = document.getElementById(deptWrapId);
+    const deptSel  = document.getElementById(deptSelId);
+    const facWrap  = document.getElementById(facWrapId);
+    const facSel   = document.getElementById(facSelId);
+    if (!roleEl) return;
 
-    function apply() {
-      const needDept = roleEl.value === 'department_head' || roleEl.value === 'lecturer';
-      if (needDept) {
-        wrapEl.classList.remove('d-none');
-        deptEl.disabled = false;
+    function hide(el){ if(el){ el.classList.add('d-none'); } }
+    function show(el){ if(el){ el.classList.remove('d-none'); } }
+
+    function apply(){
+      const val = roleEl.value;
+      if (val === 'department_head') {
+        show(deptWrap); if (deptSel) deptSel.disabled = false;
+        hide(facWrap);  if (facSel)  facSel.disabled  = true;
+      } else if (val === 'faculty_head') {
+        hide(deptWrap); if (deptSel) deptSel.disabled = true;
+        show(facWrap);  if (facSel)  facSel.disabled  = false;
       } else {
-        wrapEl.classList.add('d-none');
-        deptEl.disabled = true;
+        hide(deptWrap); if (deptSel) deptSel.disabled = true;
+        hide(facWrap);  if (facSel)  facSel.disabled  = true;
       }
     }
 
@@ -358,20 +402,24 @@
   }
 
   // Modal Add
-  bindRoleToggle('role-add','department-id-add','wrap-dept-add');
+  bindRoleToggles('role-add','wrap-dept-add','department-id-add','wrap-fac-add','faculty-id-add');
 
   // Modal Edit (per user)
-  @foreach($users as $user)
-    bindRoleToggle('role-edit-{{ $user->id }}','department-id-edit-{{ $user->id }}','wrap-dept-edit-{{ $user->id }}');
+  @foreach($users as $row)
+    bindRoleToggles(
+      'role-edit-{{ $row->id }}',
+      'wrap-dept-edit-{{ $row->id }}', 'department-id-edit-{{ $row->id }}',
+      'wrap-fac-edit-{{ $row->id }}',  'faculty-id-edit-{{ $row->id }}'
+    );
   @endforeach
 
   // Autofocus saat modal terbuka
   $('#modal-add-user').on('shown.bs.modal', function () {
     $('#name-add').trigger('focus');
   });
-  @foreach($users as $user)
-    $('#modal-edit-user-{{ $user->id }}').on('shown.bs.modal', function () {
-      $('#name-edit-{{ $user->id }}').trigger('focus');
+  @foreach($users as $row)
+    $('#modal-edit-user-{{ $row->id }}').on('shown.bs.modal', function () {
+      $('#name-edit-{{ $row->id }}').trigger('focus');
     });
   @endforeach
 

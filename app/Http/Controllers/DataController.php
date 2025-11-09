@@ -19,6 +19,10 @@ use App\Exports\listExportArticle;
 use App\Exports\userExport;
 use App\Exports\userExportField;
 
+use App\Imports\AchievementsImport;
+
+use Illuminate\Pagination\LengthAwarePaginator;
+
 class ArticlesHelper
 {
     public static function data_article(
@@ -245,237 +249,382 @@ class dataController extends Controller
     }
 
     public function admin(Request $request)
-    {
-        if (!Auth::check()) {
-            return redirect('/user/login')->with('alert', 'Kamu harus login dulu');
-        }
-
-        $authUser = Auth::user();
-
-        // ===== Scope per department (untuk non-admin) =====
-        $department_id = null;
-        if ($authUser->role !== 'admin') {
-            if ($authUser->role === 'department_head') {
-                $department_id = DepartmentHead::where('user_id', $authUser->id)->value('department_id');
-            } elseif ($authUser->role === 'lecturer') {
-                $department_id = Lecturer::where('user_id', $authUser->id)->value('department_id');
-            }
-        }
-
-        // ===== Kartu ringkas (Global, dihitung distinct competition+team+year+organizer per level) =====
-        $achBase = Achievement::when($department_id, fn($q) => $q->where('department_id', $department_id))->get();
-
-        $seenR = $seenN = $seenI = [];
-        $region = $national = $international = 0;
-
-        foreach ($achBase as $a) {
-            $key = ($a->competition ?? '') . '|' . ($a->team ?? '') . '|' . ($a->year ?? '') . '|' . ($a->organizer ?? '');
-            if ($a->level === 'Region' && !in_array($key, $seenR, true)) { $seenR[] = $key; $region++; }
-            if ($a->level === 'National' && !in_array($key, $seenN, true)) { $seenN[] = $key; $national++; }
-            if ($a->level === 'International' && !in_array($key, $seenI, true)) { $seenI[] = $key; $international++; }
-        }
-
-        // ===== Helpers =====
-        $types = [
-            "Seminar Nasional",
-            "Seminar Internasional",
-            "Jurnal Internasional",
-            "Jurnal Internasional Bereputasi",
-            "Jurnal Nasional Terakreditasi",
-            "Jurnal Nasional Tidak Terakreditasi",
-        ];
-
-        $academicMapper = function (int $y, int $m): ?string {
-            // Tahun akademik: 1 Sep — 31 Aug
-            $cur = (int)date('Y');
-            $ay  = ($m >= 9) ? $y + 1 : $y;
-            if ($ay === $cur)     return 'TS';
-            if ($ay === $cur - 1) return 'TS_1';
-            if ($ay === $cur - 2) return 'TS_2';
-            return null;
-        };
-
-        $buildArticleRange = function (Request $r, string $prefix) {
-            $sm = (int)$r->get("{$prefix}_start_month");
-            $sy = (int)$r->get("{$prefix}_start_year");
-            $em = (int)$r->get("{$prefix}_end_month");
-            $ey = (int)$r->get("{$prefix}_end_year");
-
-            if ($sm && $sy && $em && $ey) {
-                $from = Carbon::createFromDate($sy, $sm, 1)->startOfMonth();
-                $to   = Carbon::createFromDate($ey, $em, 1)->endOfMonth();
-                if ($from->gt($to)) { [$from, $to] = [$to, $from]; }
-                return [$from->toDateString(), $to->toDateString(), $sm, $sy, $em, $ey];
-            }
-            return [null, null, $sm, $sy, $em, $ey];
-        };
-
-        $buildAchRange = function (Request $r, string $prefix) {
-            $sm = (int)$r->get("{$prefix}_start_month");
-            $sy = (int)$r->get("{$prefix}_start_year");
-            $em = (int)$r->get("{$prefix}_end_month");
-            $ey = (int)$r->get("{$prefix}_end_year");
-
-            if ($sm && $sy && $em && $ey) {
-                $ym_from = ($sy * 100) + $sm;
-                $ym_to   = ($ey * 100) + $em;
-                if ($ym_from > $ym_to) { [$ym_from, $ym_to] = [$ym_to, $ym_from]; }
-                return [$ym_from, $ym_to, $sm, $sy, $em, $ey];
-            }
-            return [null, null, $sm, $sy, $em, $ey];
-        };
-
-        $computeArticleTSArrays = function ($articles, array $types, ?string $categoryFilter) use ($academicMapper) {
-            $TS  = array_fill(0, count($types), 0);
-            $TS1 = array_fill(0, count($types), 0);
-            $TS2 = array_fill(0, count($types), 0);
-
-            foreach ($types as $idx => $t) {
-                foreach ($articles as $a) {
-                    if ($a->type_journal !== $t) continue;
-                    if ($categoryFilter && $a->category !== $categoryFilter) continue;
-
-                    $y = (int)date('Y', strtotime($a->date));
-                    $m = (int)date('m', strtotime($a->date));
-                    $bucket = $academicMapper($y, $m);
-
-                    if ($bucket === 'TS')      { $TS[$idx]++;  }
-                    elseif ($bucket === 'TS_1'){ $TS1[$idx]++; }
-                    elseif ($bucket === 'TS_2'){ $TS2[$idx]++; }
-                }
-            }
-            return [$TS, $TS1, $TS2];
-        };
-
-        $computeAchievementSeries = function ($achievements) {
-            $years = collect($achievements)->pluck('year')->unique()->values()->sort()->toArray();
-            $region = $national = $international = [];
-
-            foreach ($years as $y) {
-                $seenR = $seenN = $seenI = [];
-                $r = $n = $i = 0;
-                foreach ($achievements as $a) {
-                    if ((int)$a->year !== (int)$y) continue;
-                    $key = ($a->competition ?? '') . '|' . ($a->team ?? '') . '|' . ($a->year ?? '') . '|' . ($a->organizer ?? '');
-                    if ($a->level === 'Region'        && !in_array($key, $seenR, true)) { $seenR[] = $key; $r++; }
-                    if ($a->level === 'National'      && !in_array($key, $seenN, true)) { $seenN[] = $key; $n++; }
-                    if ($a->level === 'International' && !in_array($key, $seenI, true)) { $seenI[] = $key; $i++; }
-                }
-                $region[] = $r;
-                $national[] = $n;
-                $international[] = $i;
-            }
-
-            return [$years, $region, $national, $international];
-        };
-
-        // ===== (1) Grafik Prestasi (Between only) =====
-        [$ach_ym_from, $ach_ym_to, $ach_sm, $ach_sy, $ach_em, $ach_ey] = $buildAchRange($request, 'ach');
-
-        $achievementsForChart = Achievement::when($department_id, fn($q) => $q->where('department_id', $department_id))
-            ->when($ach_ym_from && $ach_ym_to, fn($q) =>
-                $q->whereRaw('(year * 100 + month) between ? and ?', [$ach_ym_from, $ach_ym_to])
-            )
-            ->get();
-
-        [$ach_year_array, $ach_region_array, $ach_national_array, $ach_international_array] =
-            $computeAchievementSeries($achievementsForChart);
-
-        // ===== (2) Grafik Artikel (Between only) =====
-        [$art_date_from, $art_date_to, $art_sm, $art_sy, $art_em, $art_ey] = $buildArticleRange($request, 'art');
-
-        $articlesChart = Article::when($department_id, fn($q) => $q->where('department_id', $department_id))
-            ->when($art_date_from && $art_date_to, fn($q) => $q->whereBetween('date', [$art_date_from, $art_date_to]))
-            ->get();
-
-        [$art_TS_array_all, $art_TS_1_array_all, $art_TS_2_array_all] =
-            $computeArticleTSArrays($articlesChart, $types, null);
-
-        // ===== (3) Tabel 5 Prestasi Terakhir (Between only) =====
-        [$last_ym_from, $last_ym_to, $last_sm, $last_sy, $last_em, $last_ey] = $buildAchRange($request, 'last');
-
-        $data_limit = StudentAchievement::with(['student', 'achievement'])
-            ->when($department_id, fn($q) =>
-                $q->whereHas('achievement', fn($qq) => $qq->where('department_id', $department_id))
-            )
-            ->when($last_ym_from && $last_ym_to, fn($q) =>
-                $q->whereHas('achievement', fn($qq) =>
-                    $qq->whereRaw('(year * 100 + month) between ? and ?', [$last_ym_from, $last_ym_to])
-                )
-            )
-            ->orderByDesc('id')
-            ->take(5)
-            ->get();
-
-        // ===== (4) Tabel Dosen & Mahasiswa (Between only) =====
-        [$mix_date_from, $mix_date_to, $mix_sm, $mix_sy, $mix_em, $mix_ey] = $buildArticleRange($request, 'mix');
-
-        $articlesMix = Article::when($department_id, fn($q) => $q->where('department_id', $department_id))
-            ->when($mix_date_from && $mix_date_to, fn($q) => $q->whereBetween('date', [$mix_date_from, $mix_date_to]))
-            ->get();
-
-        [$mix_TS_array, $mix_TS_1_array, $mix_TS_2_array] =
-            $computeArticleTSArrays($articlesMix, $types, null);
-
-        // ===== (5) Tabel Dosen (Between only) =====
-        [$lec_date_from, $lec_date_to, $lec_sm, $lec_sy, $lec_em, $lec_ey] = $buildArticleRange($request, 'lec');
-
-        $articlesLec = Article::when($department_id, fn($q) => $q->where('department_id', $department_id))
-            ->when($lec_date_from && $lec_date_to, fn($q) => $q->whereBetween('date', [$lec_date_from, $lec_date_to]))
-            ->get();
-
-        [$lec_TS_array, $lec_TS_1_array, $lec_TS_2_array] =
-            $computeArticleTSArrays($articlesLec, $types, 'dosen');
-
-        // ===== Kirim ke view =====
-        return view('admin.index', [
-            'user' => $authUser,
-
-            // Kartu global
-            'region' => $region,
-            'national' => $national,
-            'international' => $international,
-
-            // Grafik Prestasi
-            'ach_start_month' => $ach_sm, 'ach_start_year' => $ach_sy,
-            'ach_end_month'   => $ach_em, 'ach_end_year'   => $ach_ey,
-            'ach_year_array'  => $ach_year_array,
-            'ach_region_array' => $ach_region_array,
-            'ach_national_array' => $ach_national_array,
-            'ach_international_array' => $ach_international_array,
-
-            // Grafik Artikel
-            'art_start_month' => $art_sm, 'art_start_year' => $art_sy,
-            'art_end_month'   => $art_em, 'art_end_year'   => $art_ey,
-            'data_type_array'    => $types,
-            'art_TS_array_all'   => $art_TS_array_all,
-            'art_TS_1_array_all' => $art_TS_1_array_all,
-            'art_TS_2_array_all' => $art_TS_2_array_all,
-
-            // 5 Prestasi Terakhir
-            'last_start_month' => $last_sm, 'last_start_year' => $last_sy,
-            'last_end_month'   => $last_em, 'last_end_year'   => $last_ey,
-            'data' => $data_limit,
-
-            // Dosen & Mahasiswa
-            'mix_start_month' => $mix_sm, 'mix_start_year' => $mix_sy,
-            'mix_end_month'   => $mix_em, 'mix_end_year'   => $mix_ey,
-            'mix_TS_array'    => $mix_TS_array,
-            'mix_TS_1_array'  => $mix_TS_1_array,
-            'mix_TS_2_array'  => $mix_TS_2_array,
-            'mix_date_from'   => $mix_date_from,
-            'mix_date_to'     => $mix_date_to,
-
-            // Dosen
-            'lec_start_month' => $lec_sm, 'lec_start_year' => $lec_sy,
-            'lec_end_month'   => $lec_em, 'lec_end_year'   => $lec_ey,
-            'lec_TS_array'    => $lec_TS_array,
-            'lec_TS_1_array'  => $lec_TS_1_array,
-            'lec_TS_2_array'  => $lec_TS_2_array,
-            'lec_date_from'   => $lec_date_from,
-            'lec_date_to'     => $lec_date_to,
-        ]);
+{
+    if (!Auth::check()) {
+        return redirect('/user/login')->with('alert', 'Kamu harus login dulu');
     }
+
+    $authUser = Auth::user();
+
+    // ===== global department selector (for dropdown display) =====
+    $global_department_id = null;
+    $global_departments = null;
+    if ($authUser->role === 'admin') {
+        $global_departments = \App\Models\Department::select('id','name')->orderBy('name')->get();
+        if ($request->filled('department_id')) {
+            $cid = (int)$request->get('department_id');
+            if ($global_departments->contains('id', $cid)) $global_department_id = $cid;
+        }
+    } elseif ($authUser->role === 'faculty_head') {
+        $facultyId = \App\Models\FacultyHead::where('user_id', $authUser->id)->value('faculty_id');
+        if ($facultyId) {
+            $global_departments = \App\Models\Department::where('faculty_id', $facultyId)
+                ->select('id','name')->orderBy('name')->get();
+            if ($request->filled('department_id')) {
+                $cid = (int)$request->get('department_id');
+                if ($global_departments->contains('id', $cid)) $global_department_id = $cid;
+            }
+        } else {
+            abort(403, 'Akun Dekan belum terhubung ke Fakultas.');
+        }
+    } elseif ($authUser->role === 'department_head') {
+        $global_department_id = \App\Models\DepartmentHead::where('user_id', $authUser->id)->value('department_id');
+        if (!$global_department_id) abort(403, 'Akun Kaprodi belum terhubung ke Program Studi.');
+    } elseif ($authUser->role === 'lecturer') {
+        $global_department_id = \App\Models\Lecturer::where('user_id', $authUser->id)->value('department_id');
+    } else {
+        abort(403, 'Hak akses tidak valid.');
+    }
+
+    // ===== Utility: resolve department scope per-section =====
+    $resolveSectionDept = function(Request $r, string $paramName) use ($authUser) {
+        // returns: integer dept_id, array of dept_ids, or null meaning "all"
+        $req = $r->get($paramName);
+        if ($authUser->role === 'admin') {
+            if ($req && ctype_digit((string)$req)) return (int)$req;
+            return null; // admin: null => all
+        }
+        if ($authUser->role === 'faculty_head') {
+            $facultyId = \App\Models\FacultyHead::where('user_id', $authUser->id)->value('faculty_id');
+            if (!$facultyId) return null;
+            if ($req && ctype_digit((string)$req)) {
+                $did = (int)$req;
+                $ok = \App\Models\Department::where('id', $did)->where('faculty_id', $facultyId)->exists();
+                if ($ok) return $did;
+            }
+            // return array of dept ids in faculty => means "all in faculty"
+            return \App\Models\Department::where('faculty_id', $facultyId)->pluck('id')->toArray();
+        }
+        if ($authUser->role === 'department_head') {
+            return \App\Models\DepartmentHead::where('user_id', $authUser->id)->value('department_id');
+        }
+        if ($authUser->role === 'lecturer') {
+            return \App\Models\Lecturer::where('user_id', $authUser->id)->value('department_id');
+        }
+        return null;
+    };
+
+    // section-specific department scopes (params: department_ach, department_art, department_last, department_mix, department_lec)
+    $deptAch  = $resolveSectionDept($request, 'department_ach');
+    $deptArt  = $resolveSectionDept($request, 'department_art');
+    $deptLast = $resolveSectionDept($request, 'department_last');
+    $deptMix  = $resolveSectionDept($request, 'department_mix');
+    $deptLec  = $resolveSectionDept($request, 'department_lec');
+
+    // ===== Kartu ringkas (Global, distinct competition+team+year+organizer per level) =====
+    $achBase = \App\Models\Achievement::when($global_department_id, fn($q)=> $q->where('department_id',$global_department_id))->get();
+    $seenR = $seenN = $seenI = [];
+    $region = $national = $international = 0;
+    foreach ($achBase as $a) {
+        $key = ($a->competition ?? '') . '|' . ($a->team ?? '') . '|' . ($a->year ?? '') . '|' . ($a->organizer ?? '');
+        if ($a->level === 'Region' && !in_array($key, $seenR, true)) { $seenR[] = $key; $region++; }
+        if ($a->level === 'National' && !in_array($key, $seenN, true)) { $seenN[] = $key; $national++; }
+        if ($a->level === 'International' && !in_array($key, $seenI, true)) { $seenI[] = $key; $international++; }
+    }
+
+    // ===== Helpers & types =====
+    $types = [
+        "Seminar Nasional",
+        "Seminar Internasional",
+        "Jurnal Internasional",
+        "Jurnal Internasional Bereputasi",
+        "Jurnal Nasional Terakreditasi",
+        "Jurnal Nasional Tidak Terakreditasi",
+    ];
+
+    $semesterRangesForAY = function(int $ay) {
+        $ganjil_from = Carbon::create($ay - 1, 9, 1)->startOfDay();
+        $ganjil_to = Carbon::create($ay, 2, 28)->endOfDay();
+        if (Carbon::create($ay,1,1)->isLeapYear()) $ganjil_to = Carbon::create($ay,2,29)->endOfDay();
+        $genap_from = Carbon::create($ay, 3, 1)->startOfDay();
+        $genap_to   = Carbon::create($ay, 8, 31)->endOfDay();
+        return [
+            'ganjil' => ['from' => $ganjil_from->toDateString(), 'to' => $ganjil_to->toDateString()],
+            'genap'  => ['from' => $genap_from->toDateString(),  'to' => $genap_to->toDateString()],
+        ];
+    };
+
+    // ===== Determine current TS anchor (TS = Mar..Feb window that contains "now") =====
+    $now = Carbon::today();
+    $tsStartYear = ($now->month >= 3) ? $now->year : $now->year - 1;
+    $ay_TS   = $tsStartYear;
+    $ay_TS_1 = $tsStartYear - 1;
+    $ay_TS_2 = $tsStartYear - 2;
+
+    // ===== buildArticleRange (Between filters for charts/tables) =====
+    $buildArticleRange = function (Request $r, string $prefix) {
+        $sm = (int)$r->get("{$prefix}_start_month");
+        $sy = (int)$r->get("{$prefix}_start_year");
+        $em = (int)$r->get("{$prefix}_end_month");
+        $ey = (int)$r->get("{$prefix}_end_year");
+        if ($sm && $sy && $em && $ey) {
+            $from = Carbon::createFromDate($sy, $sm, 1)->startOfMonth();
+            $to   = Carbon::createFromDate($ey, $em, 1)->endOfMonth();
+            if ($from->gt($to)) { [$from, $to] = [$to, $from]; }
+            return [$from->toDateString(), $to->toDateString(), $sm, $sy, $em, $ey];
+        }
+        return [null, null, $sm, $sy, $em, $ey];
+    };
+
+    // ===== buildAchRange (for achievements: return YM ints like 202511) =====
+    $buildAchRange = function (Request $r, string $prefix) {
+        $sm = (int)$r->get("{$prefix}_start_month");
+        $sy = (int)$r->get("{$prefix}_start_year");
+        $em = (int)$r->get("{$prefix}_end_month");
+        $ey = (int)$r->get("{$prefix}_end_year");
+        if ($sm && $sy && $em && $ey) {
+            $ym_from = ($sy * 100) + $sm;
+            $ym_to   = ($ey * 100) + $em;
+            if ($ym_from > $ym_to) { [$ym_from, $ym_to] = [$ym_to, $ym_from]; }
+            return [$ym_from, $ym_to, $sm, $sy, $em, $ey];
+        }
+        return [null, null, $sm, $sy, $em, $ey];
+    };
+
+    // -------------------------
+    // (A) Grafik Prestasi  (scope: $deptAch)
+    // -------------------------
+    [$ach_ym_from, $ach_ym_to, $ach_sm, $ach_sy, $ach_em, $ach_ey] = $buildAchRange($request, 'ach');
+
+    $achievementsForChart = \App\Models\Achievement::when(
+        // apply department scope: handle int or array
+        $deptAch,
+        function($q) use ($deptAch) {
+            if (is_array($deptAch)) return $q->whereIn('department_id', $deptAch);
+            return $q->where('department_id', $deptAch);
+        }
+    )
+    ->when($ach_ym_from && $ach_ym_to, fn($q) =>
+        $q->whereRaw('(year * 100 + month) between ? and ?', [$ach_ym_from, $ach_ym_to])
+    )
+    ->get();
+
+    $computeAchievementSeries = function ($achievements) {
+        $years = collect($achievements)->pluck('year')->unique()->values()->sort()->toArray();
+        $region = $national = $international = [];
+        foreach ($years as $y) {
+            $seenR = $seenN = $seenI = [];
+            $r = $n = $i = 0;
+            foreach ($achievements as $a) {
+                if ((int)$a->year !== (int)$y) continue;
+                $key = ($a->competition ?? '') . '|' . ($a->team ?? '') . '|' . ($a->year ?? '') . '|' . ($a->organizer ?? '');
+                if ($a->level === 'Region'        && !in_array($key, $seenR, true)) { $seenR[] = $key; $r++; }
+                if ($a->level === 'National'      && !in_array($key, $seenN, true)) { $seenN[] = $key; $n++; }
+                if ($a->level === 'International' && !in_array($key, $seenI, true)) { $seenI[] = $key; $i++; }
+            }
+            $region[] = $r; $national[] = $n; $international[] = $i;
+        }
+        return [$years, $region, $national, $international];
+    };
+
+    [$ach_year_array, $ach_region_array, $ach_national_array, $ach_international_array] =
+        $computeAchievementSeries($achievementsForChart);
+
+    // -------------------------
+    // (A2) Tabel Prestasi (with TS buckets & filter + pagination)
+    // -------------------------
+    // bucket params: ach_bucket_level (Region|National|International) and ach_bucket_diff (0,1,2)
+    $ach_bucket_level = $request->get('ach_bucket_level'); // string
+    $ach_bucket_diff  = $request->has('ach_bucket_diff') && is_numeric($request->get('ach_bucket_diff')) ? (int)$request->get('ach_bucket_diff') : null;
+
+    // base query (apply dept scope and between range)
+    $achQuery = \App\Models\Achievement::with('department')
+        ->when($deptAch, function($q) use ($deptAch) {
+            if (is_array($deptAch)) return $q->whereIn('department_id', $deptAch);
+            return $q->where('department_id', $deptAch);
+        })
+        ->when($ach_ym_from && $ach_ym_to, fn($q) =>
+            $q->whereRaw('(year * 100 + month) between ? and ?', [$ach_ym_from, $ach_ym_to])
+        )
+        ->orderByDesc('year')->orderByDesc('month');
+
+    $achAll = $achQuery->get();
+
+    // apply bucket filtering (collection-level because TS calculation uses month->TS boundary)
+    if ($ach_bucket_level && in_array($ach_bucket_level, ['Region','National','International'], true) && ($ach_bucket_diff === 0 || $ach_bucket_diff === 1 || $ach_bucket_diff === 2)) {
+        $currTsStart = ($now->month >= 3) ? $now->year : $now->year - 1;
+        $achAll = $achAll->filter(function($a) use ($currTsStart, $ach_bucket_level, $ach_bucket_diff) {
+            if (trim((string)$a->level) !== $ach_bucket_level) return false;
+            $tsStartYearOfArticle = ($a->month >= 3) ? $a->year : $a->year - 1;
+            $diff = $currTsStart - $tsStartYearOfArticle;
+            return ($diff === $ach_bucket_diff);
+        })->values();
+    }
+
+    // paginate collection manually (so we can preserve appends)
+    $page = max(1, (int)$request->get('ach_page', $request->get('page', 1)));
+    $perPage = 15;
+    $total = $achAll->count();
+    $items = $achAll->slice(($page - 1) * $perPage, $perPage)->values();
+    $achievements_table = new LengthAwarePaginator($items, $total, $perPage, $page, [
+        'path' => url()->current(),
+        'query' => $request->query()
+    ]);
+
+    // compute TS buckets summary for achievements (for building links)
+    $levels = ['Region','National','International'];
+    $ach_TS = $ach_TS_1 = $ach_TS_2 = [];
+    $currTsStart = ($now->month >= 3) ? $now->year : $now->year - 1;
+    foreach ($levels as $lvl) {
+        $c0 = $c1 = $c2 = 0;
+        foreach ($achievementsForChart as $a) {
+            if ((trim((string)$a->level) !== $lvl) || !$a->month || !$a->year) continue;
+            $tsStartYearOfArticle = ($a->month >= 3) ? $a->year : $a->year - 1;
+            $diff = $currTsStart - $tsStartYearOfArticle;
+            if ($diff === 0) $c0++; elseif ($diff === 1) $c1++; elseif ($diff === 2) $c2++;
+        }
+        $ach_TS[] = $c0; $ach_TS_1[] = $c1; $ach_TS_2[] = $c2;
+    }
+
+    // -------------------------
+    // (B) Grafik Artikel (scope: $deptArt)
+    // -------------------------
+    [$art_date_from, $art_date_to, $art_sm, $art_sy, $art_em, $art_ey] = $buildArticleRange($request, 'art');
+
+    $articlesChart = \App\Models\Article::when($deptArt, function($q) use ($deptArt) {
+            if (is_array($deptArt)) return $q->whereIn('department_id', $deptArt);
+            return $q->where('department_id', $deptArt);
+        })
+        ->when($art_date_from && $art_date_to, fn($q)=> $q->whereBetween('date', [$art_date_from, $art_date_to]))
+        ->get();
+
+    $art_TS_genap_array = $art_TS_ganjil_array = $art_TS_array_all = [];
+    $art_TS_1_genap_array = $art_TS_1_ganjil_array = $art_TS_1_array_all = [];
+    $art_TS_2_genap_array = $art_TS_2_ganjil_array = $art_TS_2_array_all = [];
+
+    foreach ($types as $t) {
+        $rangesTS = $semesterRangesForAY($ay_TS);
+        $ts_genap = $articlesChart->filter(fn($a) => (($a->type_journal ?? '') === $t) && $a->date && (Carbon::parse($a->date)->toDateString() >= $rangesTS['genap']['from']) && (Carbon::parse($a->date)->toDateString() <= $rangesTS['genap']['to']))->count();
+        $ts_ganjil = $articlesChart->filter(fn($a) => (($a->type_journal ?? '') === $t) && $a->date && (Carbon::parse($a->date)->toDateString() >= $rangesTS['ganjil']['from']) && (Carbon::parse($a->date)->toDateString() <= $rangesTS['ganjil']['to']))->count();
+        $art_TS_genap_array[] = $ts_genap; $art_TS_ganjil_array[] = $ts_ganjil; $art_TS_array_all[] = $ts_genap + $ts_ganjil;
+
+        $rangesTS1 = $semesterRangesForAY($ay_TS_1);
+        $ts1_genap = $articlesChart->filter(fn($a) => (($a->type_journal ?? '') === $t) && $a->date && (Carbon::parse($a->date)->toDateString() >= $rangesTS1['genap']['from']) && (Carbon::parse($a->date)->toDateString() <= $rangesTS1['genap']['to']))->count();
+        $ts1_ganjil = $articlesChart->filter(fn($a) => (($a->type_journal ?? '') === $t) && $a->date && (Carbon::parse($a->date)->toDateString() >= $rangesTS1['ganjil']['from']) && (Carbon::parse($a->date)->toDateString() <= $rangesTS1['ganjil']['to']))->count();
+        $art_TS_1_genap_array[] = $ts1_genap; $art_TS_1_ganjil_array[] = $ts1_ganjil; $art_TS_1_array_all[] = $ts1_genap + $ts1_ganjil;
+
+        $rangesTS2 = $semesterRangesForAY($ay_TS_2);
+        $ts2_genap = $articlesChart->filter(fn($a) => (($a->type_journal ?? '') === $t) && $a->date && (Carbon::parse($a->date)->toDateString() >= $rangesTS2['genap']['from']) && (Carbon::parse($a->date)->toDateString() <= $rangesTS2['genap']['to']))->count();
+        $ts2_ganjil = $articlesChart->filter(fn($a) => (($a->type_journal ?? '') === $t) && $a->date && (Carbon::parse($a->date)->toDateString() >= $rangesTS2['ganjil']['from']) && (Carbon::parse($a->date)->toDateString() <= $rangesTS2['ganjil']['to']))->count();
+        $art_TS_2_genap_array[] = $ts2_genap; $art_TS_2_ganjil_array[] = $ts2_ganjil; $art_TS_2_array_all[] = $ts2_genap + $ts2_ganjil;
+    }
+
+    // -------------------------
+    // (C) 5 Prestasi Terakhir (scope: $deptLast)
+    // -------------------------
+    [$last_ym_from, $last_ym_to, $last_sm, $last_sy, $last_em, $last_ey] = $buildAchRange($request, 'last');
+
+    $data_limit = \App\Models\StudentAchievement::with(['student','achievement'])
+        ->when($deptLast, function($q) use ($deptLast) {
+            if (is_array($deptLast)) return $q->whereHas('achievement', fn($qq)=> $qq->whereIn('department_id', $deptLast));
+            return $q->whereHas('achievement', fn($qq)=> $qq->where('department_id', $deptLast));
+        })
+        ->when($last_ym_from && $last_ym_to, fn($q) =>
+            $q->whereHas('achievement', fn($qq) =>
+                $qq->whereRaw('(year * 100 + month) between ? and ?', [$last_ym_from, $last_ym_to])
+            )
+        )
+        ->orderByDesc('id')->take(5)->get();
+
+    // -------------------------
+    // (D) Tables Mahasiswa & Dosen (scope: $deptMix & $deptLec)
+    // -------------------------
+    [$mix_date_from, $mix_date_to, $mix_sm, $mix_sy, $mix_em, $mix_ey] = $buildArticleRange($request, 'mix');
+    $articlesMix = \App\Models\Article::with(['students','lecturers'])
+        ->when($deptMix, function($q) use ($deptMix) {
+            if (is_array($deptMix)) return $q->whereIn('department_id', $deptMix);
+            return $q->where('department_id', $deptMix);
+        })
+        ->when($mix_date_from && $mix_date_to, fn($q)=> $q->whereBetween('date', [$mix_date_from, $mix_date_to]))
+        ->get();
+
+    [$lec_date_from, $lec_date_to, $lec_sm, $lec_sy, $lec_em, $lec_ey] = $buildArticleRange($request, 'lec');
+    $articlesLec = \App\Models\Article::with(['students','lecturers'])
+        ->when($deptLec, function($q) use ($deptLec) {
+            if (is_array($deptLec)) return $q->whereIn('department_id', $deptLec);
+            return $q->where('department_id', $deptLec);
+        })
+        ->when($lec_date_from && $lec_date_to, fn($q)=> $q->whereBetween('date', [$lec_date_from, $lec_date_to]))
+        ->get();
+
+    $computeBucketsStrict = function($articles, array $types, string $categoryStrict) use ($now) {
+        $TS = array_fill(0, count($types), 0);
+        $TS1 = array_fill(0, count($types), 0);
+        $TS2 = array_fill(0, count($types), 0);
+        $currTsStart = ($now->month >= 3) ? $now->year : $now->year - 1;
+        foreach ($types as $i => $t) {
+            foreach ($articles as $a) {
+                if ((($a->type_journal ?? '') !== $t) || !$a->date) continue;
+                $cat = trim(mb_strtolower((string)($a->category ?? '')));
+                if ($cat !== trim(mb_strtolower($categoryStrict))) continue;
+                $d = Carbon::parse($a->date);
+                $tsStartYearOfArticle = ($d->month >= 3) ? $d->year : $d->year - 1;
+                $diff = $currTsStart - $tsStartYearOfArticle;
+                if ($diff < 0 || $diff > 2) continue;
+                if ($diff === 0) $TS[$i]++; elseif ($diff === 1) $TS1[$i]++; elseif ($diff === 2) $TS2[$i]++;
+            }
+        }
+        return [$TS, $TS1, $TS2];
+    };
+
+    [$maha_TS_array, $maha_TS_1_array, $maha_TS_2_array] = $computeBucketsStrict($articlesMix, $types, 'mahasiswa');
+    [$dosen_TS_array, $dosen_TS_1_array, $dosen_TS_2_array] = $computeBucketsStrict($articlesLec, $types, 'dosen');
+
+    // ===== return view =====
+    return view('admin.index', [
+        'user' => $authUser,
+        'departments' => $global_departments,
+        'selected_department_id' => $global_department_id,
+        'region' => $region, 'national' => $national, 'international' => $international,
+
+        // achievements (chart)
+        'ach_start_month' => $ach_sm, 'ach_start_year' => $ach_sy,
+        'ach_end_month' => $ach_em, 'ach_end_year' => $ach_ey,
+        'ach_year_array' => $ach_year_array ?? [], 'ach_region_array' => $ach_region_array ?? [],
+        'ach_national_array' => $ach_national_array ?? [], 'ach_international_array' => $ach_international_array ?? [],
+
+        // achievements table & bucket
+        'achievements_table' => $achievements_table,
+        'ach_bucket_level' => $ach_bucket_level,
+        'ach_bucket_diff' => $ach_bucket_diff,
+        'ach_levels' => ['Region','National','International'],
+        'ach_TS' => $ach_TS, 'ach_TS_1' => $ach_TS_1, 'ach_TS_2' => $ach_TS_2,
+
+        // article vars...
+        'art_start_month' => $art_sm, 'art_start_year' => $art_sy,
+        'art_end_month' => $art_em, 'art_end_year' => $art_ey,
+        'data_type_array' => $types,
+        'art_TS_genap_array' => $art_TS_genap_array, 'art_TS_ganjil_array' => $art_TS_ganjil_array, 'art_TS_array_all' => $art_TS_array_all,
+        'art_TS_1_genap_array' => $art_TS_1_genap_array, 'art_TS_1_ganjil_array' => $art_TS_1_ganjil_array, 'art_TS_1_array_all' => $art_TS_1_array_all,
+        'art_TS_2_genap_array' => $art_TS_2_genap_array, 'art_TS_2_ganjil_array' => $art_TS_2_ganjil_array, 'art_TS_2_array_all' => $art_TS_2_array_all,
+
+        'last_start_month' => $last_sm ?? null, 'last_start_year' => $last_sy ?? null,
+        'last_end_month' => $last_em ?? null, 'last_end_year' => $last_ey ?? null,
+        'data' => $data_limit,
+
+        'mix_start_month' => $mix_sm, 'mix_start_year' => $mix_sy,
+        'mix_end_month' => $mix_em, 'mix_end_year' => $mix_ey,
+        'mix_date_from' => $mix_date_from, 'mix_date_to' => $mix_date_to,
+
+        'lec_start_month' => $lec_sm, 'lec_start_year' => $lec_sy,
+        'lec_end_month' => $lec_em, 'lec_end_year' => $lec_ey,
+        'lec_date_from' => $lec_date_from, 'lec_date_to' => $lec_date_to,
+
+        'maha_TS_array' => $maha_TS_array, 'maha_TS_1_array' => $maha_TS_1_array, 'maha_TS_2_array' => $maha_TS_2_array,
+        'dosen_TS_array' => $dosen_TS_array, 'dosen_TS_1_array' => $dosen_TS_1_array, 'dosen_TS_2_array' => $dosen_TS_2_array,
+    ]);
+}
+
 
     public function akademik(Request $request)
     {
@@ -1674,4 +1823,44 @@ class dataController extends Controller
                 return redirect('/')->with('status','Data berhasil dihapus');
         }
     }
+
+    public function importForm()
+    {
+        if (!Auth::check()) {
+            return redirect('/user/login')->with('alert','Kamu harus login dulu');
+        }
+
+        // Tidak perlu pilih prodi di form — department di-resolve per-row oleh import.
+        return view('admin.import', [
+            'user' => Auth::user(),
+        ]);
+    }
+
+    public function importStore(Request $request)
+    {
+        if (!Auth::check()) {
+            return redirect('/user/login')->with('alert','Kamu harus login dulu');
+        }
+
+        // Validasi file excel
+        $request->validate([
+            'excel' => ['required','file','mimes:xlsx,xls,csv','max:20480'], // 20 MB
+        ]);
+
+        $import = new AchievementsImport;
+
+        try {
+            Excel::import($import, $request->file('excel'));
+        } catch (\Throwable $e) {
+            return back()->withErrors(['excel' => 'Gagal membaca file: '.$e->getMessage()]);
+        }
+
+        $summary = $import->report ?? ['success'=>0,'skip'=>0,'errors'=>[]]; // safety
+        $msg = "Import selesai. Sukses: {$summary['success']}, Terlewat: {$summary['skip']}.";
+
+        return back()
+            ->with('status', $msg)
+            ->with('import_errors', $summary['errors'] ?? []);
+    }
+
 }

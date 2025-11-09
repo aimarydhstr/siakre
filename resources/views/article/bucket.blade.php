@@ -1,83 +1,170 @@
-@extends('layout.base')
-@section('title', 'Daftar Artikel')
+@extends ('layout.base')
+@section('title','Artikel - Bucket')
 @section('nav')
-<div class="d-flex" id="wrapper">
-  @include('template.sidebar')
+  <div class="d-flex" id="wrapper">
+    @include('template.sidebar')
 
-  <div id="page-content-wrapper" class="site">
-    {{ Breadcrumbs::render('home') }}
-    @include('template.nav')
+    <div id="page-content-wrapper" class="site">
+      {{ Breadcrumbs::render('article') }}
+      @include('template.nav')
 
-    <div class="content site-content">
-      <div class="d-md-flex align-items-center justify-content-between mt-3 mb-2">
-        <h4 class="font-weight-bold mb-0">
-          Artikel: {{ ucfirst($category) }} • {{ $bucket }} • {{ $type }}
-        </h4>
-        @if($start && $end)
-          <span class="text-muted small">Range: {{ $start }} s.d. {{ $end }}</span>
+      <div class="content site-content">
+        <div class="row mb-2">
+          <div class="col-md-8">
+            <h4 class="font-weight-bold mb-0">Artikel — {{ ucfirst($category) }} / {{ $bucket }} / {{ $type }}</h4>
+            @if($start && $end)
+              <div class="small text-muted mt-1">
+                Rentang waktu: <strong>{{ \Carbon\Carbon::parse($start)->format('d-m-Y') }}</strong>
+                sampai
+                <strong>{{ \Carbon\Carbon::parse($end)->format('d-m-Y') }}</strong>
+              </div>
+            @endif
+          </div>
+
+          <div class="col-md-4 text-right">
+            <a href="{{ route('home') }}" class="btn btn-outline-secondary">Kembali</a>
+          </div>
+        </div>
+
+        @if (session('status'))
+          <div class="my-3">
+            <div class="alert alert-primary">{{ session('status') }}</div>
+          </div>
+        @endif
+
+        @forelse($articles as $data_article)
+          <div class="card rounded shadow mb-5">
+            <div class="card-body">
+              <a class="text-decoration-none" href="{{ $data_article->url }}" target="_blank" rel="noopener">
+                <h4 class="text-capitalize mt-1 mb-3">{{ $data_article->title }}</h4>
+              </a>
+
+              <div class="row">
+                {{-- Kolom kiri --}}
+                <div class="col-sm-6 col-md-12 col-lg-6">
+                  <table class="table mb-0">
+                    <tbody>
+                      {{-- Dosen: tampilkan dosen (sesuai permintaan) --}}
+                      @php
+                        $lectList = $data_article->lecturers
+                          ->map(fn($l) => $l->name)
+                          ->filter()
+                          ->values();
+                      @endphp
+                      <tr>
+                        <td class="pl-0 opacity-5">Dosen</td>
+                        <td>{{ $lectList->isNotEmpty() ? $lectList->implode(', ') : '—' }}</td>
+                      </tr>
+
+                      <tr>
+                        <td class="pl-0 opacity-5">ISSN</td>
+                        <td>{{ $data_article->issn }}</td>
+                      </tr>
+
+                      <tr>
+                        <td class="pl-0 opacity-5">Kategori</td>
+                        <td>{{ $data_article->type_journal }}</td>
+                      </tr>
+
+                      <tr>
+                        <td class="pl-0 opacity-5">Penerbit</td>
+                        <td>{{ $data_article->publisher }}</td>
+                      </tr>
+
+                      <tr>
+                        <td class="pl-0 opacity-5">Prodi</td>
+                        <td>{{ optional($data_article->department)->name ?? '—' }}</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+
+                {{-- Kolom kanan --}}
+                <div class="col-sm-6 col-md-12 col-lg-6">
+                  <table class="table mb-0">
+                    <tbody>
+                      {{-- Mahasiswa (jika ada) --}}
+                      @php
+                        $studentList = $data_article->students
+                          ->map(fn($s) => trim(($s->name ?: '') . ($s->nim ? " ({$s->nim})" : '')))
+                          ->filter()
+                          ->values();
+                      @endphp
+                      @if($studentList->isNotEmpty())
+                        <tr>
+                          <td width="120" class="pl-0 opacity-5">Mahasiswa</td>
+                          <td>{{ $studentList->implode(', ') }}</td>
+                        </tr>
+                      @endif
+                      <tr>
+                        <td width="120" class="pl-0 opacity-5">Nomor</td>
+                        <td>{{ $data_article->number ?: '—' }}</td>
+                      </tr>
+                      <tr>
+                        <td class="pl-0 opacity-5">Volume</td>
+                        <td>{{ $data_article->volume ?: '—' }}</td>
+                      </tr>
+                      <tr>
+                        <td class="pl-0 opacity-5">Publikasi</td>
+                        <td>{{ $data_article->date ? \Carbon\Carbon::parse($data_article->date)->format('d-m-Y') : '—' }}</td>
+                      </tr>
+                      <tr>
+                        <td class="pl-0 opacity-5">DOI</td>
+                        <td>{{ $data_article->doi ?: '—' }}</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              <div class="row">
+                <div class="col-sm-6">
+                  <a class="btn btn-outline-primary d-block d-sm-inline-block mt-3"
+                     href="{{ route('view', ['id' => $data_article->id]) }}">
+                    <i class="fas fa-eye"></i> Lihat
+                  </a>
+                  @if($data_article->file)
+                  <a class="btn btn-outline-success d-block d-sm-inline-block mt-3"
+                     href="{{ route('download', ['file' => $data_article->file]) }}">
+                    <i class="fas fa-download"></i> Unduh
+                  </a>
+                  @endif
+                </div>
+                <div class="col-sm-6 text-sm-right">
+                  <a class="btn btn-primary d-block d-sm-inline-block mt-3"
+                     href="{{ route('edit_article', ['id' => $data_article->id]) }}">
+                    <i class="fas fa-pen"></i> Sunting
+                  </a>
+                  <form class="d-sm-inline-block"
+                        action="{{ route('delete_article', ['id' => $data_article->id]) }}"
+                        method="post">
+                    @method('delete')
+                    @csrf
+                    <button onclick="return confirm('yakin data ingin di hapus?');"
+                            type="submit"
+                            class="btn btn-danger d-block d-sm-inline-block mt-3 w-100 w-sm-auto">
+                      <i class="fas fa-trash"></i> Hapus
+                    </button>
+                  </form>
+                </div>
+              </div>
+            </div>
+          </div>
+        @empty
+          <div class="card rounded shadow mb-5">
+            <div class="card-body text-center text-muted">
+              Belum ada data untuk rentang tersebut.
+            </div>
+          </div>
+        @endforelse
+
+        {{-- Tidak ada search; pagination jika perlu (hapus appends search) --}}
+        @if(method_exists($articles, 'links'))
+          {{ $articles->links('pagination::bootstrap-4') }}
         @endif
       </div>
 
-      <div class="card rounded shadow mt-2">
-        <div class="card-body">
-          <div class="table-responsive">
-            <table class="table table-sm table-striped table-bordered align-middle">
-              <thead class="thead-dark">
-                <tr>
-                  <th style="width:60px" class="text-center">#</th>
-                  <th>Judul</th>
-                  <th style="width:140px">Jenis</th>
-                  <th>URL</th>
-                  <th>DOI</th>
-                  <th style="width:220px">Dosen</th>
-                  <th style="width:220px">Mahasiswa</th>
-                  <th style="width:160px">NIM</th>
-                  <th style="width:160px">Penerbit</th>
-                  <th style="width:90px" class="text-center">Volume</th>
-                  <th style="width:90px" class="text-center">Nomor</th>
-                  <th style="width:110px" class="text-center">Tanggal</th>
-                </tr>
-              </thead>
-              <tbody>
-                @forelse($articles as $a)
-                  @php
-                    $lecturers = collect($a->lecturers)->map(fn($l) => optional($l->user)->name)->filter()->implode('; ');
-                    $students  = collect($a->students)->pluck('name')->filter()->implode('; ');
-                    $nims      = collect($a->students)->pluck('nim')->filter()->implode('; ');
-                  @endphp
-                  <tr>
-                    <td class="text-center">{{ $loop->iteration }}</td>
-                    <td>{{ $a->title }}</td>
-                    <td>{{ $a->type_journal }}</td>
-                    <td>
-                      @if($a->url)
-                        <a href="{{ $a->url }}" target="_blank" rel="noopener noreferrer">{{ $a->url }}</a>
-                      @else — @endif
-                    </td>
-                    <td>{{ $a->doi ?: '—' }}</td>
-                    <td>{{ $lecturers ?: '—' }}</td>
-                    <td>{{ $students  ?: '—' }}</td>
-                    <td>{{ $nims      ?: '—' }}</td>
-                    <td>{{ $a->publisher ?: '—' }}</td>
-                    <td class="text-center">{{ $a->volume ?: '—' }}</td>
-                    <td class="text-center">{{ $a->number ?: '—' }}</td>
-                    <td class="text-center">{{ \Carbon\Carbon::parse($a->date)->format('Y-m-d') }}</td>
-                  </tr>
-                @empty
-                  <tr>
-                    <td colspan="12" class="text-center text-muted">Tidak ada data.</td>
-                  </tr>
-                @endforelse
-              </tbody>
-            </table>
-          </div>
-
-          <a href="{{ url()->previous() }}" class="btn btn-light">← Kembali</a>
-        </div>
-      </div>
+      @include('template.footer')
     </div>
-
-    @include('template.footer')
   </div>
-</div>
 @endsection

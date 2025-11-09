@@ -6,7 +6,6 @@
   @include('template.sidebar')
 
   <div id="page-content-wrapper" class="site">
-    {{ Breadcrumbs::render('add') }}
     @include('template.nav')
 
     <div class="content">
@@ -30,6 +29,7 @@
         @csrf
         @method('PUT')
 
+        {{-- FORM UTAMA --}}
         <div class="card rounded shadow mt-3 mb-5">
           <div class="card-body">
             <div class="row">
@@ -76,15 +76,10 @@
                   @error('doi')<div class="invalid-feedback">{{ $message }}</div>@enderror
                 </div>
 
-                <div class="form-group input-group-sm">
-                  <label for="publisher">Penerbit <span class="text-danger">*</span></label>
-                  <input type="text" class="form-control @error('publisher') is-invalid @enderror"
-                         id="publisher" name="publisher" placeholder="Nama penerbit/jurnal"
-                         value="{{ old('publisher', $article->publisher) }}">
-                  @error('publisher')<div class="invalid-feedback">{{ $message }}</div>@enderror
-                </div>
+                
 
-                @if(Auth::user()->role === 'admin' && isset($departments))
+                {{-- Admin pilih Prodi --}}
+                @if((Auth::user()->role === 'admin' || Auth::user()->role === 'faculty_head') && isset($departments))
                   <div class="form-group input-group-sm">
                     <label for="department_id">Program Studi <span class="text-danger">*</span></label>
                     <select id="department_id" name="department_id" class="form-control custom-select @error('department_id') is-invalid @enderror" required>
@@ -137,17 +132,22 @@
                     </div>
                   </div>
                 </div>
-
-                {{-- HANYA 2 kategori --}}
+                
+                {{-- ISSN --}}
                 <div class="form-group input-group-sm">
-                  <label for="category">Kategori Penulis <span class="text-danger">*</span></label>
-                  @php $cat = old('category', $article->category); @endphp
-                  <select id="category" name="category" class="form-control custom-select @error('category') is-invalid @enderror">
-                    <option value="" disabled {{ $cat ? '' : 'selected' }}>Pilih kategori</option>
-                    <option value="dosen"     {{ $cat==='dosen' ? 'selected':'' }}>Dosen</option>
-                    <option value="mahasiswa" {{ $cat==='mahasiswa' ? 'selected':'' }}>Mahasiswa</option>
-                  </select>
-                  @error('category')<div class="invalid-feedback">{{ $message }}</div>@enderror
+                  <label for="issn">ISSN <span class="text-danger">*</span></label>
+                  <input type="text" class="form-control @error('issn') is-invalid @enderror"
+                        id="issn" name="issn" placeholder="Contoh: 0378-5955"
+                        value="{{ old('issn', $article->issn) }}">
+                  @error('issn')<div class="invalid-feedback">{{ $message }}</div>@enderror
+                </div>
+
+                <div class="form-group input-group-sm">
+                  <label for="publisher">Penerbit <span class="text-danger">*</span></label>
+                  <input type="text" class="form-control @error('publisher') is-invalid @enderror"
+                        id="publisher" name="publisher" placeholder="Nama penerbit/jurnal"
+                        value="{{ old('publisher', $article->publisher) }}">
+                  @error('publisher')<div class="invalid-feedback">{{ $message }}</div>@enderror
                 </div>
 
                 <div class="form-group input-group-sm">
@@ -160,7 +160,7 @@
                   <small class="text-muted d-block mt-1">
                     File saat ini:
                     @if($article->file)
-                      <a href="{{ asset('article-files/'.$article->file) }}" target="_blank">{{ $article->file }}</a>
+                      <a href="{{ route('download',['file'=>$article->file]) }}" target="_blank">{{ $article->file }}</a>
                     @else
                       <em>Belum ada file</em>
                     @endif
@@ -173,26 +173,72 @@
           </div>
         </div>
 
-        {{-- PENULIS DOSEN --}}
-        <div id="section-lecturers">
-          <div class="d-flex justify-content-between align-items-center mb-2">
-            <h5 class="mb-0">Penulis Dosen</h5>
-            <button type="button" class="btn btn-sm btn-outline-primary" id="btn-add-lecturer">
-              <i class="fa fa-plus mr-1"></i> Tambah Dosen
-            </button>
+        {{-- PENULIS DOSEN (Gaya Book/HKI) --}}
+        <div class="card rounded shadow mb-4">
+          <div class="card-body">
+            <div class="d-flex justify-content-between align-items-center mb-2">
+              <h6 class="mb-0">Penulis Dosen</h6>
+              <button type="button" class="btn btn-sm btn-outline-primary" id="btn-add-lect">
+                <i class="fa fa-plus mr-1"></i> Tambah Dosen
+              </button>
+            </div>
+
+            <div id="lecturers" class="form-row"></div>
+
+            <template id="tpl-lect-row">
+              <div class="form-group col-md-12 lect-row">
+                <div class="border rounded p-2">
+                  <p class="mb-2">Dosen ke-<span class="seq">1</span></p>
+                  <div class="input-group">
+                    <select name="lecturer_ids[]" class="form-control custom-select">
+                      <option value="">-- Pilih Dosen --</option>
+                      @if(isset($lecturers))
+                        @foreach($lecturers as $lec)
+                          <option value="{{ $lec->id }}">{{ $lec->name ?? ('Dosen #'.$lec->id) }}</option>
+                        @endforeach
+                      @endif
+                    </select>
+                    <div class="input-group-append">
+                      <button type="button" class="btn btn-outline-danger btn-remove-lect">&times;</button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </template>
           </div>
-          <div id="lecturers" class="row"></div>
         </div>
 
-        {{-- PENULIS MAHASISWA --}}
-        <div id="section-students" class="mt-4">
-          <div class="d-flex justify-content-between align-items-center mb-2">
-            <h5 class="mb-0">Penulis Mahasiswa</h5>
-            <button type="button" class="btn btn-sm btn-outline-primary" id="btn-add-student">
-              <i class="fa fa-plus mr-1"></i> Tambah Mahasiswa
-            </button>
+        {{-- PENULIS MAHASISWA (Gaya Book/HKI) --}}
+        <div class="card rounded shadow mb-4">
+          <div class="card-body">
+            <div class="d-flex justify-content-between align-items-center mb-2">
+              <h6 class="mb-0">Penulis Mahasiswa</h6>
+              <button type="button" class="btn btn-sm btn-outline-primary" id="btn-add-stud">
+                <i class="fa fa-plus mr-1"></i> Tambah Mahasiswa
+              </button>
+            </div>
+
+            <div id="students" class="form-row"></div>
+
+            <template id="tpl-stud-row">
+              <div class="form-group col-md-12 stud-row">
+                <div class="border rounded p-2">
+                  <p class="mb-2">Mahasiswa ke-<span class="seq">1</span></p>
+                  <div class="form-row">
+                    <div class="col-12 py-1">
+                      <input type="text" name="student_names[]" class="form-control mb-2" placeholder="Nama">
+                    </div>
+                    <div class="col-12 py-1">
+                      <input type="text" name="student_nims[]" class="form-control mb-2" placeholder="NIM">
+                    </div>
+                  </div>
+                  <div class="text-right">
+                    <button type="button" class="btn btn-outline-danger btn-sm btn-remove-stud">Hapus</button>
+                  </div>
+                </div>
+              </div>
+            </template>
           </div>
-          <div id="students" class="row"></div>
         </div>
 
         <div class="row mt-3">
@@ -200,6 +246,7 @@
             <i><span class="text-danger">*</span> <small>Wajib diisi</small></i>
           </div>
           <div class="col-md text-md-right">
+            <a href="{{ route('article') }}" class="btn btn-outline-secondary">Kembali</a>
             <button type="submit" class="btn btn-md btn-primary">Perbarui</button>
           </div>
         </div>
@@ -228,161 +275,89 @@
     }
   })();
 
-  // custom-file label
   (function(){
-    var inputs = document.querySelectorAll('.custom-file-input');
-    for (var i=0;i<inputs.length;i++){
-      inputs[i].addEventListener('change', function(){
+    // label file
+    document.querySelectorAll('.custom-file-input').forEach(function(inp){
+      inp.addEventListener('change', function(){
         var label = this.nextElementSibling;
-        if (!label) return;
-        var f = this.files && this.files[0] ? this.files[0].name : 'Pilih file…';
-        label.textContent = f;
+        if (label) label.textContent = (this.files && this.files[0]) ? this.files[0].name : 'Pilih file…';
+      });
+    });
+
+    // helpers
+    function addFromTemplate(tplEl, container, afterAddCb){
+      const node = tplEl.content.firstElementChild.cloneNode(true);
+      container.appendChild(node);
+      if (typeof afterAddCb === 'function') afterAddCb(node);
+      renumber(container);
+    }
+    function attachRemoveBtn(node, selector, container){
+      const btn = node.querySelector(selector);
+      if (btn) btn.addEventListener('click', function(){ node.remove(); renumber(container); });
+    }
+    function renumber(scope){
+      scope.querySelectorAll('.lect-row').forEach((row, i)=>{
+        const seq = row.querySelector('.seq'); if (seq) seq.textContent = String(i+1);
+      });
+      scope.querySelectorAll('.stud-row').forEach((row, i)=>{
+        const seq = row.querySelector('.seq'); if (seq) seq.textContent = String(i+1);
       });
     }
-  })();
 
-  // ---------- Dinamis Dosen ----------
-  var lecturersWrap = document.getElementById('lecturers');
-  var addLectBtn    = document.getElementById('btn-add-lecturer');
-  function addLecturerRow(selectedId){
-    var col = document.createElement('div');
-    col.className = 'col-md-6';
-    var html = `
-      <div class="shadow bg-white border rounded p-3 mb-3">
-        <div class="form-group input-group-sm mb-2">
-          <label>Dosen</label>
-          <select name="lecturer_ids[]" class="form-control custom-select">
-            <option value="">-- Pilih Dosen --</option>
-            @if(isset($lecturers) && $lecturers->count())
-              @foreach($lecturers as $lec)
-                @php $lecName = optional($lec->user)->name ?? 'Tanpa Nama'; @endphp
-                <option value="{{ $lec->id }}">{{ $lecName }}</option>
-              @endforeach
-            @endif
-          </select>
-        </div>
-        <div class="d-flex">
-          <button type="button" class="btn btn-outline-danger btn-sm ml-auto btn-remove-lect">Hapus</button>
-        </div>
-      </div>
-    `;
-    col.innerHTML = html;
-    lecturersWrap.appendChild(col);
+    // Dosen
+    const lectWrap = document.getElementById('lecturers');
+    const lectTpl  = document.getElementById('tpl-lect-row');
+    const btnLect  = document.getElementById('btn-add-lect');
 
-    if (selectedId){
-      var sel = col.querySelector('select[name="lecturer_ids[]"]');
-      if (sel) sel.value = selectedId;
+    const lectInit = @json(old('lecturer_ids', $currentLecturerIds ?? []));
+    if (Array.isArray(lectInit) && lectInit.length){
+      lectInit.forEach(function(val){
+        addFromTemplate(lectTpl, lectWrap, function(node){
+          const sel = node.querySelector('select[name="lecturer_ids[]"]');
+          if (sel) sel.value = String(val);
+          attachRemoveBtn(node, '.btn-remove-lect', lectWrap);
+        });
+      });
     }
-
-    col.querySelector('.btn-remove-lect').addEventListener('click', function(){
-      col.remove();
-    });
-  }
-  addLectBtn.addEventListener('click', function(){ addLecturerRow(null); });
-
-  // ---------- Dinamis Mahasiswa ----------
-  var studentsWrap = document.getElementById('students');
-  var addStuBtn    = document.getElementById('btn-add-student');
-  function addStudentRow(nameVal, nimVal){
-    var col = document.createElement('div');
-    col.className = 'col-md-6';
-    var html = `
-      <div class="shadow bg-white border rounded p-3 mb-3">
-        <div class="form-group input-group-sm">
-          <label>Nama Mahasiswa</label>
-          <input type="text" name="student_names[]" class="form-control" placeholder="Nama lengkap" value="">
-        </div>
-        <div class="form-group input-group-sm">
-          <label>NIM</label>
-          <input type="text" name="student_nims[]" class="form-control" placeholder="Nomor Induk Mahasiswa" value="">
-        </div>
-        <div class="d-flex">
-          <button type="button" class="btn btn-outline-danger btn-sm ml-auto btn-remove-stu">Hapus</button>
-        </div>
-      </div>
-    `;
-    col.innerHTML = html;
-    studentsWrap.appendChild(col);
-
-    if (typeof nameVal === 'string') col.querySelector('input[name="student_names[]"]').value = nameVal;
-    if (typeof nimVal === 'string')  col.querySelector('input[name="student_nims[]"]').value  = nimVal;
-
-    col.querySelector('.btn-remove-stu').addEventListener('click', function(){
-      col.remove();
-    });
-  }
-  addStuBtn.addEventListener('click', function(){ addStudentRow('', ''); });
-
-  // ---------- Toggle UI berdasarkan kategori ----------
-  var catEl           = document.getElementById('category');
-  var sectionLect     = document.getElementById('section-lecturers');
-  var sectionStud     = document.getElementById('section-students');
-
-  function ensureAtLeastOneRow(container, addFunc){
-    if (!container.querySelector('.shadow')) {
-      // addFunc argumen kompatibel utk dosen & mahasiswa
-      addFunc(null, null);
+    if (!lectWrap.querySelector('.lect-row')){
+      addFromTemplate(lectTpl, lectWrap, (node)=>attachRemoveBtn(node,'.btn-remove-lect', lectWrap));
     }
-  }
+    btnLect?.addEventListener('click', ()=> addFromTemplate(lectTpl, lectWrap, (node)=>attachRemoveBtn(node,'.btn-remove-lect', lectWrap)));
 
-  function applyCategoryUI(catValue, isInit){
-    if (catValue === 'dosen') {
-      sectionLect.classList.remove('d-none');
-      sectionStud.classList.add('d-none');
-      ensureAtLeastOneRow(lecturersWrap, addLecturerRow);
-      if (!isInit) { studentsWrap.innerHTML = ''; }
-    } else if (catValue === 'mahasiswa') {
-      sectionLect.classList.remove('d-none');
-      sectionStud.classList.remove('d-none');
-      ensureAtLeastOneRow(lecturersWrap, addLecturerRow);
-      ensureAtLeastOneRow(studentsWrap, addStudentRow);
+    // Mahasiswa
+    const studWrap = document.getElementById('students');
+    const studTpl  = document.getElementById('tpl-stud-row');
+    const btnStud  = document.getElementById('btn-add-stud');
+
+    const oldNames = @json(old('student_names', []));
+    const oldNims  = @json(old('student_nims',  []));
+    const hasOld   = (oldNames && oldNames.length) || (oldNims && oldNims.length);
+
+    if (hasOld){
+      const rows = Math.max(oldNames.length || 0, oldNims.length || 0);
+      for (let i=0;i<rows;i++){
+        addFromTemplate(studTpl, studWrap, function(node){
+          node.querySelector('input[name="student_names[]"]').value = (oldNames[i] || '');
+          node.querySelector('input[name="student_nims[]"]').value  = (oldNims[i]  || '');
+          attachRemoveBtn(node, '.btn-remove-stud', studWrap);
+        });
+      }
     } else {
-      sectionLect.classList.add('d-none');
-      sectionStud.classList.add('d-none');
+      @if(isset($currentStudents) && $currentStudents->count())
+        @foreach($currentStudents as $stu)
+          addFromTemplate(studTpl, studWrap, function(node){
+            node.querySelector('input[name="student_names[]"]').value = @json($stu->name ?? '');
+            node.querySelector('input[name="student_nims[]"]').value  = @json($stu->nim ?? '');
+            attachRemoveBtn(node, '.btn-remove-stud', studWrap);
+          });
+        @endforeach
+      @endif
     }
-  }
 
-  // ------- Muat data awal ke baris (old() prioritas, kalau tidak ada pakai current) -------
-  // Dosen (old)
-  @php $oldLect = old('lecturer_ids', []); @endphp
-  @if(is_array($oldLect) && count($oldLect))
-    @foreach($oldLect as $lid)
-      addLecturerRow({{ (int)$lid }});
-    @endforeach
-  @else
-    // Dosen (current)
-    @if(isset($currentLecturerIds) && is_array($currentLecturerIds) && count($currentLecturerIds))
-      @foreach($currentLecturerIds as $lid)
-        addLecturerRow({{ (int)$lid }});
-      @endforeach
-    @endif
-  @endif
-  // Jika masih kosong, tambah 1 baris default
-  if (!lecturersWrap.querySelector('.shadow')) addLecturerRow(null);
-
-  // Mahasiswa (old)
-  @php $oldNames = old('student_names', []); $oldNims = old('student_nims', []); @endphp
-  @if(is_array($oldNames) && count($oldNames))
-    @for($i=0;$i<count($oldNames);$i++)
-      addStudentRow(@json($oldNames[$i] ?? ''), @json($oldNims[$i] ?? ''));
-    @endfor
-  @else
-    // Mahasiswa (current)
-    @if(isset($currentStudents) && $currentStudents->count())
-      @foreach($currentStudents as $stu)
-        addStudentRow(@json($stu->name ?? ''), @json($stu->nim ?? ''));
-      @endforeach
-    @endif
-  @endif
-  // Jika masih kosong, tambah 1 baris default (nanti bisa tersembunyi tergantung kategori)
-  if (!studentsWrap.querySelector('.shadow')) addStudentRow('', '');
-
-  // Terapkan UI berdasar kategori saat load
-  applyCategoryUI(catEl.value || '', true);
-
-  // On change kategori
-  catEl.addEventListener('change', function(){
-    applyCategoryUI(this.value, false);
-  });
+    if (!studWrap.querySelector('.stud-row')){
+      addFromTemplate(studTpl, studWrap, (node)=>attachRemoveBtn(node,'.btn-remove-stud', studWrap));
+    }
+    btnStud?.addEventListener('click', ()=> addFromTemplate(studTpl, studWrap, (node)=>attachRemoveBtn(node,'.btn-remove-stud', studWrap)));
+  })();
 </script>
 @endsection

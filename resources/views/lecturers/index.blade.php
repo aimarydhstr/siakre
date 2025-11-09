@@ -1,5 +1,5 @@
 @extends('layout.base')
-@section('title','Dosen Prodi Saya')
+@section('title','Dosen')
 
 @section('nav')
 <div class="d-flex" id="wrapper">
@@ -9,7 +9,7 @@
     @include('template.nav')
 
     <div class="content">
-      <h4 class="font-weight-bold my-3 mt-md-4">Dosen di Program Studi Saya</h4>
+      <h4 class="font-weight-bold my-3 mt-md-4">Daftar Dosen</h4>
 
       {{-- Flash message --}}
       @if(session('success'))
@@ -31,9 +31,14 @@
         <div class="card-body">
           <div class="d-flex justify-content-between align-items-center mb-3">
             <div>Total Dosen: {{ method_exists($lecturers,'total') ? $lecturers->total() : $lecturers->count() }}</div>
-            <button class="btn btn-primary btn-sm" data-toggle="modal" data-target="#modal-add-lecturer">
-              <i class="fa fa-plus mr-1"></i> Tambah Dosen
-            </button>
+            <div class="d-flex gap-2">
+              <button class="btn btn-primary btn-sm mr-2" data-toggle="modal" data-target="#modal-add-lecturer">
+                <i class="fa fa-plus mr-1"></i> Tambah Dosen
+              </button>
+              <a href="{{ route('lecturers.import.form') }}" class="btn btn-success btn-sm">
+                <i class="fa fa-upload mr-1"></i> Import Data
+              </a>
+            </div>
           </div>
 
           <div class="table-responsive">
@@ -41,8 +46,11 @@
               <thead class="thead-light">
                 <tr>
                   <th style="width:64px;">#</th>
+                  <th>NIDN</th>
                   <th>Nama</th>
-                  <th>Email</th>
+                  @if(in_array(Auth::user()->role, ['admin','faculty_head']))
+                    <th>Program Studi</th>
+                  @endif
                   <th>Jabatan</th>
                   <th>Bidang Keilmuan</th>
                   <th style="width:160px;">Aksi</th>
@@ -51,14 +59,16 @@
               <tbody>
                 @forelse($lecturers as $i => $lec)
                   @php
-                    $user = $lec->user;
-                    $field = $lec->expertiseField;
+                    $field  = $lec->expertiseField;
                     $parent = optional($field)->expertise;
                   @endphp
                   <tr>
                     <td>{{ ($lecturers->currentPage()-1)*$lecturers->perPage() + $i + 1 }}</td>
-                    <td class="text-break">{{ optional($user)->name }}</td>
-                    <td class="text-break">{{ optional($user)->email }}</td>
+                    <td class="text-break">{{ $lec->nidn ?? '—' }}</td>
+                    <td class="text-break">{{ $lec->name ?? '—' }}</td>
+                    @if(in_array(Auth::user()->role, ['admin','faculty_head']))
+                      <td class="text-break">{{ optional($lec->department)->name ?? '—' }}</td>
+                    @endif
                     <td>{{ $lec->position ?? '—' }}</td>
                     <td>
                       @if($parent || $field)
@@ -97,6 +107,26 @@
                           <div class="modal-body">
                             <div class="row">
                               <div class="col-md-6">
+                                {{-- Program Studi (hanya admin & faculty_head) --}}
+                                @if(in_array(Auth::user()->role, ['admin','faculty_head']))
+                                  <div class="form-group">
+                                    <label for="department_id-edit-{{ $lec->id }}">Program Studi <span class="text-danger">*</span></label>
+                                    <select id="department_id-edit-{{ $lec->id }}"
+                                            name="department_id"
+                                            class="form-control @error('department_id') is-invalid @enderror"
+                                            required>
+                                      <option value="">— Pilih Prodi —</option>
+                                      @foreach(($departments ?? []) as $d)
+                                        <option value="{{ $d->id }}"
+                                          {{ (old('department_id') ?? $lec->department_id) == $d->id ? 'selected' : '' }}>
+                                          {{ $d->name }}
+                                        </option>
+                                      @endforeach
+                                    </select>
+                                    @error('department_id') <div class="invalid-feedback">{{ $message }}</div> @enderror
+                                  </div>
+                                @endif
+
                                 {{-- Nama --}}
                                 <div class="form-group">
                                   <label for="name-edit-{{ $lec->id }}">Nama <span class="text-danger">*</span></label>
@@ -104,49 +134,11 @@
                                          id="name-edit-{{ $lec->id }}"
                                          name="name"
                                          class="form-control @error('name') is-invalid @enderror"
-                                         value="{{ old('name', optional($user)->name) }}"
+                                         value="{{ old('name', $lec->name) }}"
                                          required autocomplete="off">
                                   @error('name') <div class="invalid-feedback">{{ $message }}</div> @enderror
                                 </div>
 
-                                {{-- Email --}}
-                                <div class="form-group">
-                                  <label for="email-edit-{{ $lec->id }}">Email <span class="text-danger">*</span></label>
-                                  <input type="email"
-                                         id="email-edit-{{ $lec->id }}"
-                                         name="email"
-                                         class="form-control @error('email') is-invalid @enderror"
-                                         value="{{ old('email', optional($user)->email) }}"
-                                         required autocomplete="off">
-                                  @error('email') <div class="invalid-feedback">{{ $message }}</div> @enderror
-                                </div>
-
-                                {{-- Password (opsional) --}}
-                                <div class="form-group">
-                                  <label for="password-edit-{{ $lec->id }}">Password (opsional)</label>
-                                  <input type="password"
-                                         id="password-edit-{{ $lec->id }}"
-                                         name="password"
-                                         class="form-control @error('password') is-invalid @enderror"
-                                         autocomplete="new-password"
-                                         placeholder="Biarkan kosong jika tidak diubah">
-                                  @error('password') <div class="invalid-feedback">{{ $message }}</div> @enderror
-                                </div>
-
-                                {{-- Password konfirmasi --}}
-                                <div class="form-group">
-                                  <label for="password-confirm-edit-{{ $lec->id }}">Ulangi Password (opsional)</label>
-                                  <input type="password"
-                                         id="password-confirm-edit-{{ $lec->id }}"
-                                         name="password_confirmation"
-                                         class="form-control @error('password_confirmation') is-invalid @enderror"
-                                         autocomplete="new-password"
-                                         placeholder="Ulangi password jika mengubah">
-                                  @error('password_confirmation') <div class="invalid-feedback">{{ $message }}</div> @enderror
-                                </div>
-                              </div>
-
-                              <div class="col-md-6">
                                 {{-- NIK --}}
                                 <div class="form-group">
                                   <label for="nik-edit-{{ $lec->id }}">NIK</label>
@@ -171,6 +163,18 @@
                                   @error('nidn') <div class="invalid-feedback">{{ $message }}</div> @enderror
                                 </div>
 
+                                {{-- Alamat --}}
+                                <div class="form-group">
+                                  <label for="address-edit-{{ $lec->id }}">Alamat</label>
+                                  <textarea id="address-edit-{{ $lec->id }}"
+                                            name="address"
+                                            class="form-control @error('address') is-invalid @enderror"
+                                            rows="2">{{ old('address', $lec->address) }}</textarea>
+                                  @error('address') <div class="invalid-feedback">{{ $message }}</div> @enderror
+                                </div>
+                              </div>
+
+                              <div class="col-md-6">
                                 {{-- Tempat / Tanggal Lahir --}}
                                 <div class="form-row">
                                   <div class="form-group col-md-6">
@@ -193,38 +197,26 @@
                                   </div>
                                 </div>
 
-                                {{-- Alamat --}}
-                                <div class="form-group">
-                                  <label for="address-edit-{{ $lec->id }}">Alamat</label>
-                                  <textarea id="address-edit-{{ $lec->id }}"
-                                            name="address"
-                                            class="form-control @error('address') is-invalid @enderror"
-                                            rows="2">{{ old('address', $lec->address) }}</textarea>
-                                  @error('address') <div class="invalid-feedback">{{ $message }}</div> @enderror
-                                </div>
-
                                 {{-- Jabatan & Status --}}
-                                <div class="form-row">
-                                  <div class="form-group col-md-6">
-                                    <label for="position-edit-{{ $lec->id }}">Jabatan Fungsional</label>
-                                    <select id="position-edit-{{ $lec->id }}" name="position" class="form-control @error('position') is-invalid @enderror">
-                                      <option value="">— Pilih —</option>
-                                      @foreach(($positions ?? []) as $pos)
-                                        <option value="{{ $pos }}" {{ old('position', $lec->position) === $pos ? 'selected' : '' }}>{{ $pos }}</option>
-                                      @endforeach
-                                    </select>
-                                    @error('position') <div class="invalid-feedback">{{ $message }}</div> @enderror
-                                  </div>
-                                  <div class="form-group col-md-6">
-                                    <label for="marital-edit-{{ $lec->id }}">Status Keluarga</label>
-                                    <select id="marital-edit-{{ $lec->id }}" name="marital_status" class="form-control @error('marital_status') is-invalid @enderror">
-                                      <option value="">— Pilih —</option>
-                                      @foreach(($maritals ?? []) as $m)
-                                        <option value="{{ $m }}" {{ old('marital_status', $lec->marital_status) === $m ? 'selected' : '' }}>{{ $m }}</option>
-                                      @endforeach
-                                    </select>
-                                    @error('marital_status') <div class="invalid-feedback">{{ $message }}</div> @enderror
-                                  </div>
+                                <div class="form-group">
+                                  <label for="position-edit-{{ $lec->id }}">Jabatan Fungsional</label>
+                                  <select id="position-edit-{{ $lec->id }}" name="position" class="form-control @error('position') is-invalid @enderror">
+                                    <option value="">— Pilih —</option>
+                                    @foreach(($positions ?? []) as $pos)
+                                      <option value="{{ $pos }}" {{ old('position', $lec->position) === $pos ? 'selected' : '' }}>{{ $pos }}</option>
+                                    @endforeach
+                                  </select>
+                                  @error('position') <div class="invalid-feedback">{{ $message }}</div> @enderror
+                                </div>
+                                <div class="form-group">
+                                  <label for="marital-edit-{{ $lec->id }}">Status Keluarga</label>
+                                  <select id="marital-edit-{{ $lec->id }}" name="marital_status" class="form-control @error('marital_status') is-invalid @enderror">
+                                    <option value="">— Pilih —</option>
+                                    @foreach(($maritals ?? []) as $m)
+                                      <option value="{{ $m }}" {{ old('marital_status', $lec->marital_status) === $m ? 'selected' : '' }}>{{ $m }}</option>
+                                    @endforeach
+                                  </select>
+                                  @error('marital_status') <div class="invalid-feedback">{{ $message }}</div> @enderror
                                 </div>
 
                                 {{-- Bidang Keilmuan (Parent → Child) --}}
@@ -243,7 +235,6 @@
                                         </option>
                                       @endforeach
                                     </select>
-                                    {{-- helper untuk request (tidak disubmit) --}}
                                     <input type="hidden" name="exp_parent_{{ $lec->id }}" value="{{ old('exp_parent_'.$lec->id, $selectedParent) }}">
                                   </div>
                                   <div class="form-group col-md-6">
@@ -282,10 +273,9 @@
                           <div class="modal-body">
                             <p class="mb-2">Yakin ingin menghapus dosen ini?</p>
                             <ul class="mb-0">
-                              <li><strong>Nama:</strong> {{ optional($user)->name }}</li>
-                              <li><strong>Email:</strong> {{ optional($user)->email }}</li>
+                              <li><strong>Nama:</strong> {{ $lec->name }}</li>
+                              <li><strong>NIDN:</strong> {{ $lec->nidn ?? '—' }}</li>
                             </ul>
-                            <small class="text-muted d-block mt-2">Tindakan ini juga akan menghapus akun pengguna dosen terkait.</small>
                           </div>
                           <div class="modal-footer">
                             <button type="button" class="btn btn-outline-secondary" data-dismiss="modal">Batal</button>
@@ -298,7 +288,7 @@
 
                 @empty
                   <tr>
-                    <td colspan="6" class="text-center">Belum ada dosen di prodi Anda.</td>
+                    <td colspan="{{ in_array(Auth::user()->role, ['admin','faculty_head']) ? 7 : 6 }}" class="text-center">Belum ada dosen.</td>
                   </tr>
                 @endforelse
               </tbody>
@@ -338,6 +328,26 @@
         <div class="modal-body">
           <div class="row">
             <div class="col-md-6">
+
+              {{-- Program Studi (hanya admin & faculty_head) --}}
+              @if(in_array(Auth::user()->role, ['admin','faculty_head']))
+                <div class="form-group">
+                  <label for="department_id-add">Program Studi <span class="text-danger">*</span></label>
+                  <select id="department_id-add"
+                          name="department_id"
+                          class="form-control @error('department_id') is-invalid @enderror"
+                          required>
+                    <option value="">— Pilih Prodi —</option>
+                    @foreach(($departments ?? []) as $d)
+                      <option value="{{ $d->id }}" {{ old('department_id') == $d->id ? 'selected' : '' }}>
+                        {{ $d->name }}
+                      </option>
+                    @endforeach
+                  </select>
+                  @error('department_id') <div class="invalid-feedback">{{ $message }}</div> @enderror
+                </div>
+              @endif
+
               {{-- Nama --}}
               <div class="form-group">
                 <label for="name-add">Nama <span class="text-danger">*</span></label>
@@ -351,59 +361,28 @@
                 @error('name') <div class="invalid-feedback">{{ $message }}</div> @enderror
               </div>
 
-              {{-- Email --}}
+              {{-- NIK / NIDN --}}
               <div class="form-group">
-                <label for="email-add">Email <span class="text-danger">*</span></label>
-                <input type="email"
-                       id="email-add"
-                       name="email"
-                       class="form-control @error('email') is-invalid @enderror"
-                       value="{{ old('email') }}"
-                       required autocomplete="off"
-                       placeholder="nama@kampus.ac.id">
-                @error('email') <div class="invalid-feedback">{{ $message }}</div> @enderror
+                <label for="nik-add">NIK</label>
+                <input type="text" id="nik-add" name="nik" class="form-control @error('nik') is-invalid @enderror" value="{{ old('nik') }}">
+                @error('nik') <div class="invalid-feedback">{{ $message }}</div> @enderror
+              </div>
+              <div class="form-group">
+                <label for="nidn-add">NIDN</label>
+                <input type="text" id="nidn-add" name="nidn" class="form-control @error('nidn') is-invalid @enderror" value="{{ old('nidn') }}">
+                @error('nidn') <div class="invalid-feedback">{{ $message }}</div> @enderror
               </div>
 
-              {{-- Password --}}
+              {{-- Alamat --}}
               <div class="form-group">
-                <label for="password-add">Password <span class="text-danger">*</span></label>
-                <input type="password"
-                       id="password-add"
-                       name="password"
-                       class="form-control @error('password') is-invalid @enderror"
-                       required autocomplete="new-password"
-                       placeholder="Minimal 6 karakter">
-                @error('password') <div class="invalid-feedback">{{ $message }}</div> @enderror
+                <label for="address-add">Alamat</label>
+                <textarea id="address-add" name="address" class="form-control @error('address') is-invalid @enderror" rows="2">{{ old('address') }}</textarea>
+                @error('address') <div class="invalid-feedback">{{ $message }}</div> @enderror
               </div>
 
-              {{-- Ulangi Password --}}
-              <div class="form-group">
-                <label for="password-confirm-add">Ulangi Password <span class="text-danger">*</span></label>
-                <input type="password"
-                       id="password-confirm-add"
-                       name="password_confirmation"
-                       class="form-control @error('password_confirmation') is-invalid @enderror"
-                       required autocomplete="new-password"
-                       placeholder="Ulangi password yang sama">
-                @error('password_confirmation') <div class="invalid-feedback">{{ $message }}</div> @enderror
-              </div>
             </div>
 
             <div class="col-md-6">
-              {{-- NIK / NIDN --}}
-              <div class="form-row">
-                <div class="form-group col-md-6">
-                  <label for="nik-add">NIK</label>
-                  <input type="text" id="nik-add" name="nik" class="form-control @error('nik') is-invalid @enderror" value="{{ old('nik') }}">
-                  @error('nik') <div class="invalid-feedback">{{ $message }}</div> @enderror
-                </div>
-                <div class="form-group col-md-6">
-                  <label for="nidn-add">NIDN</label>
-                  <input type="text" id="nidn-add" name="nidn" class="form-control @error('nidn') is-invalid @enderror" value="{{ old('nidn') }}">
-                  @error('nidn') <div class="invalid-feedback">{{ $message }}</div> @enderror
-                </div>
-              </div>
-
               {{-- Tempat/Tanggal Lahir --}}
               <div class="form-row">
                 <div class="form-group col-md-6">
@@ -418,35 +397,26 @@
                 </div>
               </div>
 
-              {{-- Alamat --}}
-              <div class="form-group">
-                <label for="address-add">Alamat</label>
-                <textarea id="address-add" name="address" class="form-control @error('address') is-invalid @enderror" rows="2">{{ old('address') }}</textarea>
-                @error('address') <div class="invalid-feedback">{{ $message }}</div> @enderror
-              </div>
-
               {{-- Jabatan & Status --}}
-              <div class="form-row">
-                <div class="form-group col-md-6">
-                  <label for="position-add">Jabatan Fungsional</label>
-                  <select id="position-add" name="position" class="form-control @error('position') is-invalid @enderror">
-                    <option value="">— Pilih —</option>
-                    @foreach(($positions ?? []) as $pos)
-                      <option value="{{ $pos }}" {{ old('position')===$pos ? 'selected' : '' }}>{{ $pos }}</option>
-                    @endforeach
-                  </select>
-                  @error('position') <div class="invalid-feedback">{{ $message }}</div> @enderror
-                </div>
-                <div class="form-group col-md-6">
-                  <label for="marital-add">Status Keluarga</label>
-                  <select id="marital-add" name="marital_status" class="form-control @error('marital_status') is-invalid @enderror">
-                    <option value="">— Pilih —</option>
-                    @foreach(($maritals ?? []) as $m)
-                      <option value="{{ $m }}" {{ old('marital_status')===$m ? 'selected' : '' }}>{{ $m }}</option>
-                    @endforeach
-                  </select>
-                  @error('marital_status') <div class="invalid-feedback">{{ $message }}</div> @enderror
-                </div>
+              <div class="form-group">
+                <label for="position-add">Jabatan Fungsional</label>
+                <select id="position-add" name="position" class="form-control @error('position') is-invalid @enderror">
+                  <option value="">— Pilih —</option>
+                  @foreach(($positions ?? []) as $pos)
+                    <option value="{{ $pos }}" {{ old('position')===$pos ? 'selected' : '' }}>{{ $pos }}</option>
+                  @endforeach
+                </select>
+                @error('position') <div class="invalid-feedback">{{ $message }}</div> @enderror
+              </div>
+              <div class="form-group">
+                <label for="marital-add">Status Keluarga</label>
+                <select id="marital-add" name="marital_status" class="form-control @error('marital_status') is-invalid @enderror">
+                  <option value="">— Pilih —</option>
+                  @foreach(($maritals ?? []) as $m)
+                    <option value="{{ $m }}" {{ old('marital_status')===$m ? 'selected' : '' }}>{{ $m }}</option>
+                  @endforeach
+                </select>
+                @error('marital_status') <div class="invalid-feedback">{{ $message }}</div> @enderror
               </div>
 
               {{-- Bidang Keilmuan (Parent → Child) --}}
@@ -550,11 +520,6 @@
     fillChildOptions(parentSel, '#exp-field-edit-{{ $lec->id }}', selectedChild);
   });
   @endforeach
-
-  // Autofocus modal-add saat dibuka manual
-  $('#modal-add-lecturer').on('shown.bs.modal', function () {
-    $('#name-add').trigger('focus');
-  });
 
   // Auto-buka modal yang error: create atau edit-{id}
   @if ($errors->any() && old('_from'))

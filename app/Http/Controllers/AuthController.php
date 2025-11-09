@@ -34,7 +34,7 @@ class AuthController extends Controller
                     return redirect('/');
                 case 'department_head':
                     return redirect('/');
-                case 'lecturer':
+                case 'faculty_head':
                     return redirect('/');
                 default:
                     Auth::logout();

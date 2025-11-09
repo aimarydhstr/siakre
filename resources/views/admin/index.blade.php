@@ -6,7 +6,6 @@
   @include('template.sidebar')
 
   <div id="page-content-wrapper" class="site">
-    {{ Breadcrumbs::render('home') }}
     @include('template.nav')
 
     <div class="content site-content">
@@ -51,6 +50,32 @@
             {{-- Grafik Prestasi --}}
             <div class="col-md-6 mb-3">
               <form method="GET" action="{{ route('home') }}" class="form-inline mb-2">
+                {{-- Section-specific department selector --}}
+                @if(in_array($user->role ?? '', ['admin','faculty_head']))
+                <div class="row col-md-12">
+                    <select name="department_ach" class="form-control form-control-sm mr-2 w-100 mb-3">
+                      <option value="">Semua Prodi</option>
+                      @foreach($departments ?? [] as $dept)
+                        <option value="{{ $dept->id }}"
+                          @if((int)request()->get('department_ach') === (int)$dept->id) selected
+                          @elseif(!request()->has('department_ach') && isset($selected_department_id) && (int)$selected_department_id === (int)$dept->id) selected @endif>
+                          {{ $dept->name }}
+                        </option>
+                      @endforeach
+                    </select>
+                  @else
+                    {{-- non-admin -> force department via hidden --}}
+                    <input type="hidden" name="department_ach" value="{{ $selected_department_id }}">
+                  @endif
+
+                  {{-- preserve global dropdown param so UI remains consistent --}}
+                  @if(request()->filled('department_id'))
+                    <input type="hidden" name="department_id" value="{{ request()->get('department_id') }}">
+                  @elseif(isset($selected_department_id))
+                    <input type="hidden" name="department_id" value="{{ $selected_department_id }}">
+                  @endif
+                </div>
+
                 <select name="ach_start_month" class="form-control form-control-sm mr-1">
                   <option value="">MM</option>
                   @for($m=1;$m<=12;$m++)
@@ -88,6 +113,30 @@
             {{-- Grafik Artikel --}}
             <div class="col-md-6 mb-3">
               <form method="GET" action="{{ route('home') }}" class="form-inline mb-2">
+                {{-- Section-specific department selector --}}
+                @if(in_array($user->role ?? '', ['admin','faculty_head']))
+                <div class="row col-md-12">
+                    <select name="department_art" class="form-control form-control-sm mr-2 w-100 mb-3">
+                      <option value="">Semua Prodi</option>
+                      @foreach($departments ?? [] as $dept)
+                        <option value="{{ $dept->id }}"
+                          @if((int)request()->get('department_art') === (int)$dept->id) selected
+                          @elseif(!request()->has('department_art') && isset($selected_department_id) && (int)$selected_department_id === (int)$dept->id) selected @endif>
+                          {{ $dept->name }}
+                        </option>
+                      @endforeach
+                    </select>
+                  @else
+                    <input type="hidden" name="department_art" value="{{ $selected_department_id }}">
+                  @endif
+
+                  @if(request()->filled('department_id'))
+                    <input type="hidden" name="department_id" value="{{ request()->get('department_id') }}">
+                  @elseif(isset($selected_department_id))
+                    <input type="hidden" name="department_id" value="{{ $selected_department_id }}">
+                  @endif
+                </div>
+
                 <select name="art_start_month" class="form-control form-control-sm mr-1">
                   <option value="">MM</option>
                   @for($m=1;$m<=12;$m++)
@@ -132,11 +181,177 @@
         </div>
       </div>
 
+      {{-- ========================= --}}
+      {{-- PRESTASI: TS summary + Tabel (baru) --}}
+      {{-- ========================= --}}
+      <div class="card rounded shadow mt-2 mb-4">
+        <div class="card-header">
+          <strong>Daftar Prestasi</strong>
+          <small class="text-muted d-block">Filter Prodi / Periode (Between). Klik angka TS untuk melihat bucket (TS / TS-1 / TS-2).</small>
+        </div>
+        <div class="card-body">
+          <form method="GET" action="{{ route('home') }}" class="form-inline mb-3">
+            {{-- show department selector only for admin/faculty_head --}}
+            @if(in_array($user->role ?? '', ['admin','faculty_head']))
+              <select name="department_ach" class="form-control form-control-sm mr-2">
+                <option value="">Semua Prodi</option>
+                @foreach($departments ?? [] as $dept)
+                  <option value="{{ $dept->id }}" {{ (string)request()->get('department_ach') === (string)$dept->id ? 'selected' : ((!request()->has('department_ach') && isset($selected_department_id) && (string)$selected_department_id === (string)$dept->id) ? 'selected' : '') }}>
+                    {{ $dept->name }}
+                  </option>
+                @endforeach
+              </select>
+            @else
+              <input type="hidden" name="department_ach" value="{{ $selected_department_id }}">
+            @endif
+
+            {{-- preserve global selector --}}
+            @if(request()->filled('department_id'))
+              <input type="hidden" name="department_id" value="{{ request()->get('department_id') }}">
+            @elseif(isset($selected_department_id))
+              <input type="hidden" name="department_id" value="{{ $selected_department_id }}">
+            @endif
+
+            <select name="ach_start_month" class="form-control form-control-sm mr-1">
+              <option value="">MM</option>
+              @for($m=1;$m<=12;$m++)
+                <option value="{{ $m }}" @if(isset($ach_start_month) && (int)$ach_start_month===$m) selected @endif>{{ str_pad($m,2,'0',STR_PAD_LEFT) }}</option>
+              @endfor
+            </select>
+            <select name="ach_start_year" class="form-control form-control-sm mr-2">
+              <option value="">YYYY</option>
+              @for($y=date('Y')+1;$y>=date('Y')-6;$y--)
+                <option value="{{ $y }}" @if(isset($ach_start_year) && (int)$ach_start_year===$y) selected @endif>{{ $y }}</option>
+              @endfor
+            </select>
+
+            <span class="text-muted small mr-2">to</span>
+
+            <select name="ach_end_month" class="form-control form-control-sm mr-1">
+              <option value="">MM</option>
+              @for($m=1;$m<=12;$m++)
+                <option value="{{ $m }}" @if(isset($ach_end_month) && (int)$ach_end_month===$m) selected @endif>{{ str_pad($m,2,'0',STR_PAD_LEFT) }}</option>
+              @endfor
+            </select>
+            <select name="ach_end_year" class="form-control form-control-sm mr-2">
+              <option value="">YYYY</option>
+              @for($y=date('Y')+1;$y>=date('Y')-6;$y--)
+                <option value="{{ $y }}" @if(isset($ach_end_year) && (int)$ach_end_year===$y) selected @endif>{{ $y }}</option>
+              @endfor
+            </select>
+
+            <button class="btn btn-sm btn-primary">Filter</button>
+            <a href="{{ route('home') }}" class="btn btn-sm btn-light ml-1">Reset</a>
+          </form>
+
+          {{-- TS buckets summary with links --}}
+          <div class="mb-3">
+            <h6>Ringkasan TS (Prestasi)</h6>
+            <table class="table table-sm table-bordered" style="max-width:900px;">
+              <thead class="table-light">
+                <tr>
+                  <th>Level</th>
+                  <th>TS</th>
+                  <th>TS-1</th>
+                  <th>TS-2</th>
+                </tr>
+              </thead>
+              <tbody>
+                @foreach($ach_levels as $idx => $lvl)
+                  <tr>
+                    <td>{{ $lvl }}</td>
+                    <td>
+                      <a href="{{ route('stats.achievements.bucket', [$lvl, 'TS']) }}?{{ http_build_query(array_merge(request()->except(['page','ach_page']), ['department_ach' => request()->get('department_ach'), 'ach_start_month'=>request()->get('ach_start_month'), 'ach_start_year'=>request()->get('ach_start_year'), 'ach_end_month'=>request()->get('ach_end_month'), 'ach_end_year'=>request()->get('ach_end_year')])) }}">
+                        {{ $ach_TS[$idx] ?? 0 }}
+                      </a>
+                    </td>
+                    <td>
+                      <a href="{{ route('stats.achievements.bucket', [$lvl, 'TS-1']) }}?{{ http_build_query(array_merge(request()->except(['page','ach_page']), ['department_ach' => request()->get('department_ach'), 'ach_start_month'=>request()->get('ach_start_month'), 'ach_start_year'=>request()->get('ach_start_year'), 'ach_end_month'=>request()->get('ach_end_month'), 'ach_end_year'=>request()->get('ach_end_year')])) }}">
+                        {{ $ach_TS_1[$idx] ?? 0 }}
+                      </a>
+                    </td>
+                    <td>
+                      <a href="{{ route('stats.achievements.bucket', [$lvl, 'TS-2']) }}?{{ http_build_query(array_merge(request()->except(['page','ach_page']), ['department_ach' => request()->get('department_ach'), 'ach_start_month'=>request()->get('ach_start_month'), 'ach_start_year'=>request()->get('ach_start_year'), 'ach_end_month'=>request()->get('ach_end_month'), 'ach_end_year'=>request()->get('ach_end_year')])) }}">
+                        {{ $ach_TS_2[$idx] ?? 0 }}
+                      </a>
+
+                    </td>
+                  </tr>
+                @endforeach
+              </tbody>
+            </table>
+            <small class="text-muted">Klik angka untuk membuka daftar prestasi pada bucket tersebut.</small>
+          </div>
+
+          {{-- achievements table (paginated) --}}
+          <div class="table-responsive">
+            <table class="table table-striped table-range">
+              <thead class="bg-primary text-white">
+                <tr class="text-center">
+                  <th>#</th>
+                  <th class="text-left">Tanggal</th>
+                  <th class="text-left">Kompetisi</th>
+                  <th class="text-left">Tim / Peserta</th>
+                  <th>Level</th>
+                  <th>Penyelenggara</th>
+                  <th>Prodi</th>
+                  <th>Aksi</th>
+                </tr>
+              </thead>
+              <tbody>
+                @forelse($achievements_table as $ach)
+                  <tr class="text-center">
+                    <th scope="row">{{ $loop->iteration + (($achievements_table->currentPage()-1) * $achievements_table->perPage()) }}</th>
+                    <td class="text-left">{{ sprintf('%02d', $ach->month ?? 0) }}/{{ $ach->year ?? '' }}</td>
+                    <td class="text-left">{{ $ach->competition }}</td>
+                    <td class="text-left">{{ $ach->team }}</td>
+                    <td>{{ $ach->level }}</td>
+                    <td class="text-left">{{ $ach->organizer }}</td>
+                    <td>{{ $ach->department->name ?? '-' }}</td>
+                    <td>
+                      <a href="{{ url('/achievements/'.$ach->id) }}" class="btn btn-sm btn-outline-primary">Detail</a>
+                    </td>
+                  </tr>
+                @empty
+                  <tr><td colspan="8" class="text-center">Tidak ada data prestasi.</td></tr>
+                @endforelse
+              </tbody>
+            </table>
+
+            {{-- pagination: menjaga semua query params --}}
+            <div>
+              {{ $achievements_table->appends(request()->except('page'))->links() }}
+            </div>
+          </div>
+        </div>
+      </div>
+
       {{-- ====== 5 Prestasi Terakhir ====== --}}
       <h4 class="font-weight-bold my-3 mt-md-4">5 Prestasi Terakhir</h4>
       <div class="card rounded shadow mt-2 mb-4">
         <div class="card-body">
           <form method="GET" action="{{ route('home') }}" class="form-inline mb-3">
+            @if(in_array($user->role ?? '', ['admin','faculty_head']))
+              <select name="department_last" class="form-control form-control-sm mr-2">
+                <option value="">Semua Prodi</option>
+                @foreach($departments ?? [] as $dept)
+                  <option value="{{ $dept->id }}"
+                    @if((int)request()->get('department_last') === (int)$dept->id) selected
+                    @elseif(!request()->has('department_last') && isset($selected_department_id) && (int)$selected_department_id === (int)$dept->id) selected @endif>
+                    {{ $dept->name }}
+                  </option>
+                @endforeach
+              </select>
+            @else
+              <input type="hidden" name="department_last" value="{{ $selected_department_id }}">
+            @endif
+
+            @if(request()->filled('department_id'))
+              <input type="hidden" name="department_id" value="{{ request()->get('department_id') }}">
+            @elseif(isset($selected_department_id))
+              <input type="hidden" name="department_id" value="{{ $selected_department_id }}">
+            @endif
+
             <select name="last_start_month" class="form-control form-control-sm mr-1">
               <option value="">MM</option>
               @for($m=1;$m<=12;$m++)
@@ -197,9 +412,9 @@
         </div>
       </div>
 
-      {{-- ====== Dosen & Mahasiswa (klik angka → list) ====== --}}
+      {{-- ====== Tabel Artikel: MAHASISWA (category == 'mahasiswa') ====== --}}
       <div class="d-md-flex align-items-center justify-content-between mx-1 mt-1 mb-2">
-        <h4 class="font-weight-bold my-2 mt-md-3">Dosen dan Mahasiswa</h4>
+        <h4 class="font-weight-bold my-2 mt-md-3">Artikel — Dosen & Mahasiswa </h4>
         <a href="{{ route('article-mahasiswa') }}" class="btn btn-outline-primary my-2 my-md-0">
           <i class="fas fa-download mr-1"></i> Unduh Excel
         </a>
@@ -207,6 +422,27 @@
       <div class="card rounded shadow mt-1 mb-4">
         <div class="card-body">
           <form method="GET" action="{{ route('home') }}" class="form-inline mb-3">
+            @if(in_array($user->role ?? '', ['admin','faculty_head']))
+              <select name="department_mix" class="form-control form-control-sm mr-2">
+                <option value="">Semua Prodi</option>
+                @foreach($departments ?? [] as $dept)
+                  <option value="{{ $dept->id }}"
+                    @if((int)request()->get('department_mix') === (int)$dept->id) selected
+                    @elseif(!request()->has('department_mix') && isset($selected_department_id) && (int)$selected_department_id === (int)$dept->id) selected @endif>
+                    {{ $dept->name }}
+                  </option>
+                @endforeach
+              </select>
+            @else
+              <input type="hidden" name="department_mix" value="{{ $selected_department_id }}">
+            @endif
+
+            @if(request()->filled('department_id'))
+              <input type="hidden" name="department_id" value="{{ request()->get('department_id') }}">
+            @elseif(isset($selected_department_id))
+              <input type="hidden" name="department_id" value="{{ $selected_department_id }}">
+            @endif
+
             <select name="mix_start_month" class="form-control form-control-sm mr-1">
               <option value="">MM</option>
               @for($m=1;$m<=12;$m++)
@@ -257,21 +493,21 @@
                   $typeParam = urlencode($type);
                   $s = $mix_date_from ?? '';
                   $e = $mix_date_to   ?? '';
-                  $ts2 = (int)($mix_TS_2_array[$idx] ?? 0);
-                  $ts1 = (int)($mix_TS_1_array[$idx] ?? 0);
-                  $ts  = (int)($mix_TS_array[$idx]    ?? 0);
+                  $ts2 = (int)($maha_TS_2_array[$idx] ?? 0);
+                  $ts1 = (int)($maha_TS_1_array[$idx] ?? 0);
+                  $ts  = (int)($maha_TS_array[$idx]    ?? 0);
                 @endphp
                 <tr>
                   <td>{{ $loop->iteration }}</td>
                   <td class="text-left">{{ $type }}</td>
                   <td>
-                    <a href="{{ route('stats.articles.bucket', ['category'=>'mix','bucket'=>'TS-2','type'=>$typeParam]) }}@if($s && $e)?start={{ $s }}&end={{ $e }}@endif">{{ $ts2 }}</a>
+                    <a href="{{ route('stats.articles.bucket', ['category'=>'mahasiswa','bucket'=>'TS-2','type'=>$typeParam]) }}@if($s && $e)?start={{ $s }}&end={{ $e }}@endif">{{ $ts2 }}</a>
                   </td>
                   <td>
-                    <a href="{{ route('stats.articles.bucket', ['category'=>'mix','bucket'=>'TS-1','type'=>$typeParam]) }}@if($s && $e)?start={{ $s }}&end={{ $e }}@endif">{{ $ts1 }}</a>
+                    <a href="{{ route('stats.articles.bucket', ['category'=>'mahasiswa','bucket'=>'TS-1','type'=>$typeParam]) }}@if($s && $e)?start={{ $s }}&end={{ $e }}@endif">{{ $ts1 }}</a>
                   </td>
                   <td>
-                    <a href="{{ route('stats.articles.bucket', ['category'=>'mix','bucket'=>'TS','type'=>$typeParam]) }}@if($s && $e)?start={{ $s }}&end={{ $e }}@endif">{{ $ts }}</a>
+                    <a href="{{ route('stats.articles.bucket', ['category'=>'mahasiswa','bucket'=>'TS','type'=>$typeParam]) }}@if($s && $e)?start={{ $s }}&end={{ $e }}@endif">{{ $ts }}</a>
                   </td>
                   <td>{{ $ts2 + $ts1 + $ts }}</td>
                 </tr>
@@ -282,9 +518,9 @@
         </div>
       </div>
 
-      {{-- ====== Dosen (klik angka → list) ====== --}}
+      {{-- ====== Tabel Artikel: DOSEN (category == 'dosen') ====== --}}
       <div class="d-md-flex align-items-center justify-content-between mx-1 mt-3 mb-2">
-        <h4 class="font-weight-bold my-2 mt-md-3">Dosen</h4>
+        <h4 class="font-weight-bold my-2 mt-md-3">Artikel — Dosen</h4>
         <a href="{{ route('article-dosen') }}" class="btn btn-outline-primary my-2 my-md-0">
           <i class="fas fa-download mr-1"></i> Unduh Excel
         </a>
@@ -292,6 +528,27 @@
       <div class="card rounded shadow mt-1 mb-5">
         <div class="card-body">
           <form method="GET" action="{{ route('home') }}" class="form-inline mb-3">
+            @if(in_array($user->role ?? '', ['admin','faculty_head']))
+              <select name="department_lec" class="form-control form-control-sm mr-2">
+                <option value="">Semua Prodi</option>
+                @foreach($departments ?? [] as $dept)
+                  <option value="{{ $dept->id }}"
+                    @if((int)request()->get('department_lec') === (int)$dept->id) selected
+                    @elseif(!request()->has('department_lec') && isset($selected_department_id) && (int)$selected_department_id === (int)$dept->id) selected @endif>
+                    {{ $dept->name }}
+                  </option>
+                @endforeach
+              </select>
+            @else
+              <input type="hidden" name="department_lec" value="{{ $selected_department_id }}">
+            @endif
+
+            @if(request()->filled('department_id'))
+              <input type="hidden" name="department_id" value="{{ request()->get('department_id') }}">
+            @elseif(isset($selected_department_id))
+              <input type="hidden" name="department_id" value="{{ $selected_department_id }}">
+            @endif
+
             <select name="lec_start_month" class="form-control form-control-sm mr-1">
               <option value="">MM</option>
               @for($m=1;$m<=12;$m++)
@@ -342,9 +599,9 @@
                   $typeParam = urlencode($type);
                   $s = $lec_date_from ?? '';
                   $e = $lec_date_to   ?? '';
-                  $ts2 = (int)($lec_TS_2_array[$idx] ?? 0);
-                  $ts1 = (int)($lec_TS_1_array[$idx] ?? 0);
-                  $ts  = (int)($lec_TS_array[$idx]    ?? 0);
+                  $ts2 = (int)($dosen_TS_2_array[$idx] ?? 0);
+                  $ts1 = (int)($dosen_TS_1_array[$idx] ?? 0);
+                  $ts  = (int)($dosen_TS_array[$idx]    ?? 0);
                 @endphp
                 <tr>
                   <td>{{ $loop->iteration }}</td>
